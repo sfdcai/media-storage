@@ -50,6 +50,20 @@ SYNCTHING_PORT="8384"
 
 log "Starting Media Pipeline Installation..."
 
+# Check prerequisites
+log "Checking prerequisites..."
+if ! command -v systemctl &> /dev/null; then
+    error "systemd is required but not found. This script is designed for systemd-based systems."
+    exit 1
+fi
+
+if ! command -v python3.11 &> /dev/null && ! command -v python3 &> /dev/null; then
+    error "Python 3 is required but not found."
+    exit 1
+fi
+
+log "Prerequisites check passed."
+
 # Update system packages
 log "Updating system packages..."
 $SUDO_CMD apt update && $SUDO_CMD apt upgrade -y
@@ -252,18 +266,93 @@ ReadWritePaths=$PROJECT_DIR $LOG_DIR
 WantedBy=multi-user.target
 EOF
 
-# Create cron job for regular pipeline execution
-log "Setting up cron job..."
-# Ensure cron directory has proper permissions
-$SUDO_CMD mkdir -p /var/spool/cron/crontabs
-$SUDO_CMD chown root:crontab /var/spool/cron/crontabs
-$SUDO_CMD chmod 755 /var/spool/cron/crontabs
+# Set up scheduled execution (cron or systemd timer)
+log "Setting up scheduled execution..."
 
-# Create cron job using a temporary file
-CRON_TEMP="/tmp/media_pipeline_cron"
-echo "0 2 * * * cd $PROJECT_DIR && $PROJECT_DIR/venv/bin/python $PROJECT_DIR/pipeline_orchestrator.py >> $LOG_DIR/cron.log 2>&1" > "$CRON_TEMP"
-$SU_CMD "$SERVICE_USER" -c "crontab $CRON_TEMP"
-$SUDO_CMD rm -f "$CRON_TEMP"
+# Detect if we're in an LXC container
+if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q "container=lxc" /proc/1/environ 2>/dev/null || [ -d /proc/vz ] && [ ! -d /proc/bc ]; then
+    warn "Detected LXC/container environment. Using systemd timer instead of cron."
+    USE_SYSTEMD_TIMER=true
+else
+    USE_SYSTEMD_TIMER=false
+fi
+
+if [ "$USE_SYSTEMD_TIMER" = true ]; then
+    # Use systemd timer for LXC containers
+    log "Creating systemd timer for LXC container..."
+    
+    # Create a one-shot service for the pipeline
+    $SUDO_CMD tee /etc/systemd/system/media-pipeline-run.service > /dev/null <<EOF
+[Unit]
+Description=Run Media Pipeline (One-shot)
+After=network.target
+
+[Service]
+Type=oneshot
+User=$SERVICE_USER
+Group=$SERVICE_USER
+WorkingDirectory=$PROJECT_DIR
+Environment=PATH=$PROJECT_DIR/venv/bin
+ExecStart=$PROJECT_DIR/venv/bin/python $PROJECT_DIR/pipeline_orchestrator.py
+StandardOutput=journal
+StandardError=journal
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$PROJECT_DIR $LOG_DIR /mnt/wd_all_pictures
+EOF
+
+    # Create the timer
+    $SUDO_CMD tee /etc/systemd/system/media-pipeline-daily.timer > /dev/null <<EOF
+[Unit]
+Description=Run Media Pipeline daily at 2 AM
+Requires=media-pipeline-run.service
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    $SUDO_CMD systemctl daemon-reload
+    $SUDO_CMD systemctl enable media-pipeline-daily.timer
+    log "Systemd timer created successfully for LXC container"
+    
+else
+    # Use traditional cron for regular systems
+    log "Setting up cron job for regular system..."
+    
+    # Ensure cron service is running
+    $SUDO_CMD systemctl enable cron
+    $SUDO_CMD systemctl start cron
+
+    # Ensure cron directory has proper permissions
+    $SUDO_CMD mkdir -p /var/spool/cron/crontabs
+    $SUDO_CMD chown root:crontab /var/spool/cron/crontabs
+    $SUDO_CMD chmod 755 /var/spool/cron/crontabs
+    $SUDO_CMD chmod 1777 /var/spool/cron
+
+    # Create cron job using a more robust method
+    CRON_TEMP="/tmp/media_pipeline_cron_$$"
+    echo "0 2 * * * cd $PROJECT_DIR && $PROJECT_DIR/venv/bin/python $PROJECT_DIR/pipeline_orchestrator.py >> $LOG_DIR/cron.log 2>&1" > "$CRON_TEMP"
+    $SUDO_CMD chown "$SERVICE_USER:$SERVICE_USER" "$CRON_TEMP"
+    $SU_CMD "$SERVICE_USER" -c "crontab $CRON_TEMP"
+    $SUDO_CMD rm -f "$CRON_TEMP"
+
+    # Verify cron job was created
+    if $SU_CMD "$SERVICE_USER" -c "crontab -l" | grep -q "pipeline_orchestrator.py"; then
+        log "Cron job created successfully"
+    else
+        warn "Failed to create cron job. Falling back to systemd timer..."
+        USE_SYSTEMD_TIMER=true
+    fi
+fi
 
 # Configure Nginx for Web UI
 log "Configuring Nginx..."
