@@ -29,9 +29,12 @@ info() {
     echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')] INFO: $1${NC}"
 }
 
-# Check if running as root
+# Check if running as root and adjust sudo usage
 if [[ $EUID -eq 0 ]]; then
-   warning "This script should not be run as root for security reasons"
+   warn "Running as root - will skip sudo commands"
+   SUDO_CMD=""
+else
+   SUDO_CMD="sudo"
 fi
 
 # Configuration variables
@@ -47,11 +50,11 @@ log "Starting Media Pipeline Installation..."
 
 # Update system packages
 log "Updating system packages..."
-sudo apt update && sudo apt upgrade -y
+$SUDO_CMD apt update && $SUDO_CMD apt upgrade -y
 
 # Install essential packages
 log "Installing essential packages..."
-sudo apt install -y \
+$SUDO_CMD apt install -y \
     curl \
     wget \
     git \
@@ -80,52 +83,52 @@ sudo apt install -y \
 # Install Python 3.11 if not available
 log "Setting up Python $PYTHON_VERSION..."
 if ! command -v python3.11 &> /dev/null; then
-    sudo add-apt-repository ppa:deadsnakes/ppa -y
-    sudo apt update
-    sudo apt install -y python3.11 python3.11-venv python3.11-dev
+    $SUDO_CMD add-apt-repository ppa:deadsnakes/ppa -y
+    $SUDO_CMD apt update
+    $SUDO_CMD apt install -y python3.11 python3.11-venv python3.11-dev
 fi
 
 # Create service user
 log "Creating service user: $SERVICE_USER"
 if ! id "$SERVICE_USER" &>/dev/null; then
-    sudo useradd -r -s /bin/bash -d "$PROJECT_DIR" -m "$SERVICE_USER"
-    sudo usermod -aG sudo "$SERVICE_USER"
+    $SUDO_CMD useradd -r -s /bin/bash -d "$PROJECT_DIR" -m "$SERVICE_USER"
+    $SUDO_CMD usermod -aG sudo "$SERVICE_USER"
 fi
 
 # Create directories
 log "Creating project directories..."
-sudo mkdir -p "$PROJECT_DIR"
-sudo mkdir -p "$LOG_DIR"
-sudo mkdir -p "$CONFIG_DIR"
-sudo mkdir -p "/mnt/wd_all_pictures/incoming"
-sudo mkdir -p "/mnt/wd_all_pictures/backup"
-sudo mkdir -p "/mnt/wd_all_pictures/compress"
-sudo mkdir -p "/mnt/wd_all_pictures/delete_pending"
-sudo mkdir -p "/mnt/wd_all_pictures/processed"
+$SUDO_CMD mkdir -p "$PROJECT_DIR"
+$SUDO_CMD mkdir -p "$LOG_DIR"
+$SUDO_CMD mkdir -p "$CONFIG_DIR"
+$SUDO_CMD mkdir -p "/mnt/wd_all_pictures/incoming"
+$SUDO_CMD mkdir -p "/mnt/wd_all_pictures/backup"
+$SUDO_CMD mkdir -p "/mnt/wd_all_pictures/compress"
+$SUDO_CMD mkdir -p "/mnt/wd_all_pictures/delete_pending"
+$SUDO_CMD mkdir -p "/mnt/wd_all_pictures/processed"
 
 # Set permissions
-sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR"
-sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$LOG_DIR"
-sudo chown -R "$SERVICE_USER:$SERVICE_USER" "/mnt/wd_all_pictures"
-sudo chmod 755 "$PROJECT_DIR"
-sudo chmod 755 "$LOG_DIR"
+$SUDO_CMD chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR"
+$SUDO_CMD chown -R "$SERVICE_USER:$SERVICE_USER" "$LOG_DIR"
+$SUDO_CMD chown -R "$SERVICE_USER:$SERVICE_USER" "/mnt/wd_all_pictures"
+$SUDO_CMD chmod 755 "$PROJECT_DIR"
+$SUDO_CMD chmod 755 "$LOG_DIR"
 
 # Install Syncthing
 log "Installing Syncthing..."
 if ! command -v syncthing &> /dev/null; then
-    curl -s https://syncthing.net/release-key.txt | sudo apt-key add -
-    echo "deb https://apt.syncthing.net/ syncthing stable" | sudo tee /etc/apt/sources.list.d/syncthing.list
-    sudo apt update
-    sudo apt install -y syncthing
+    curl -s https://syncthing.net/release-key.txt | $SUDO_CMD apt-key add -
+    echo "deb https://apt.syncthing.net/ syncthing stable" | $SUDO_CMD tee /etc/apt/sources.list.d/syncthing.list
+    $SUDO_CMD apt update
+    $SUDO_CMD apt install -y syncthing
 fi
 
 # Install icloudpd
 log "Installing icloudpd..."
-sudo pip3 install icloudpd
+$SUDO_CMD pip3 install icloudpd
 
 # Install additional Python packages
 log "Installing Python dependencies..."
-sudo pip3 install \
+$SUDO_CMD pip3 install \
     PyYAML \
     Pillow \
     python-dateutil \
@@ -143,18 +146,18 @@ sudo pip3 install \
 
 # Copy project files
 log "Copying project files..."
-sudo cp -r . "$PROJECT_DIR/"
-sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR"
+$SUDO_CMD cp -r . "$PROJECT_DIR/"
+$SUDO_CMD chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR"
 
 # Create Python virtual environment
 log "Setting up Python virtual environment..."
-sudo -u "$SERVICE_USER" python3.11 -m venv "$PROJECT_DIR/venv"
-sudo -u "$SERVICE_USER" "$PROJECT_DIR/venv/bin/pip" install --upgrade pip
-sudo -u "$SERVICE_USER" "$PROJECT_DIR/venv/bin/pip" install -r "$PROJECT_DIR/requirements.txt"
+$SUDO_CMD -u "$SERVICE_USER" python3.11 -m venv "$PROJECT_DIR/venv"
+$SUDO_CMD -u "$SERVICE_USER" "$PROJECT_DIR/venv/bin/pip" install --upgrade pip
+$SUDO_CMD -u "$SERVICE_USER" "$PROJECT_DIR/venv/bin/pip" install -r "$PROJECT_DIR/requirements.txt"
 
 # Create systemd service for Syncthing
 log "Creating Syncthing systemd service..."
-sudo tee /etc/systemd/system/syncthing@$SERVICE_USER.service > /dev/null <<EOF
+$SUDO_CMD tee /etc/systemd/system/syncthing@$SERVICE_USER.service > /dev/null <<EOF
 [Unit]
 Description=Syncthing - Open Source Continuous File Synchronization for %i
 Documentation=man:syncthing(1)
@@ -186,7 +189,7 @@ EOF
 
 # Create systemd service for Media Pipeline
 log "Creating Media Pipeline systemd service..."
-sudo tee /etc/systemd/system/media-pipeline.service > /dev/null <<EOF
+$SUDO_CMD tee /etc/systemd/system/media-pipeline.service > /dev/null <<EOF
 [Unit]
 Description=Media Pipeline Service
 After=network.target syncthing@$SERVICE_USER.service
@@ -217,7 +220,7 @@ EOF
 
 # Create systemd service for Web UI
 log "Creating Web UI systemd service..."
-sudo tee /etc/systemd/system/media-pipeline-web.service > /dev/null <<EOF
+$SUDO_CMD tee /etc/systemd/system/media-pipeline-web.service > /dev/null <<EOF
 [Unit]
 Description=Media Pipeline Web UI
 After=network.target media-pipeline.service
@@ -250,11 +253,11 @@ EOF
 
 # Create cron job for regular pipeline execution
 log "Setting up cron job..."
-sudo -u "$SERVICE_USER" crontab -l 2>/dev/null | { cat; echo "0 2 * * * cd $PROJECT_DIR && $PROJECT_DIR/venv/bin/python $PROJECT_DIR/pipeline_orchestrator.py >> $LOG_DIR/cron.log 2>&1"; } | sudo -u "$SERVICE_USER" crontab -
+$SUDO_CMD -u "$SERVICE_USER" crontab -l 2>/dev/null | { cat; echo "0 2 * * * cd $PROJECT_DIR && $PROJECT_DIR/venv/bin/python $PROJECT_DIR/pipeline_orchestrator.py >> $LOG_DIR/cron.log 2>&1"; } | $SUDO_CMD -u "$SERVICE_USER" crontab -
 
 # Configure Nginx for Web UI
 log "Configuring Nginx..."
-sudo tee /etc/nginx/sites-available/media-pipeline > /dev/null <<EOF
+$SUDO_CMD tee /etc/nginx/sites-available/media-pipeline > /dev/null <<EOF
 server {
     listen 80;
     server_name _;
@@ -280,12 +283,12 @@ server {
 }
 EOF
 
-sudo ln -sf /etc/nginx/sites-available/media-pipeline /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
+$SUDO_CMD ln -sf /etc/nginx/sites-available/media-pipeline /etc/nginx/sites-enabled/
+$SUDO_CMD rm -f /etc/nginx/sites-enabled/default
 
 # Create default configuration
 log "Creating default configuration..."
-sudo -u "$SERVICE_USER" tee "$CONFIG_DIR/config.yaml" > /dev/null <<EOF
+$SUDO_CMD -u "$SERVICE_USER" tee "$CONFIG_DIR/config.yaml" > /dev/null <<EOF
 # Media Pipeline Configuration
 database:
   file_path: "$PROJECT_DIR/media.db"
@@ -356,7 +359,7 @@ EOF
 
 # Create environment file template
 log "Creating environment file template..."
-sudo -u "$SERVICE_USER" tee "$PROJECT_DIR/.env.template" > /dev/null <<EOF
+$SUDO_CMD -u "$SERVICE_USER" tee "$PROJECT_DIR/.env.template" > /dev/null <<EOF
 # Media Pipeline Environment Variables
 # Copy this file to .env and fill in your values
 
@@ -381,30 +384,30 @@ EOF
 
 # Set up environment file
 if [ ! -f "$PROJECT_DIR/.env" ]; then
-    sudo -u "$SERVICE_USER" cp "$PROJECT_DIR/.env.template" "$PROJECT_DIR/.env"
+    $SUDO_CMD -u "$SERVICE_USER" cp "$PROJECT_DIR/.env.template" "$PROJECT_DIR/.env"
     warn "Please edit $PROJECT_DIR/.env with your actual credentials"
 fi
 
 # Reload systemd and start services
 log "Reloading systemd and starting services..."
-sudo systemctl daemon-reload
-sudo systemctl enable syncthing@$SERVICE_USER
-sudo systemctl enable media-pipeline
-sudo systemctl enable media-pipeline-web
-sudo systemctl enable nginx
+$SUDO_CMD systemctl daemon-reload
+$SUDO_CMD systemctl enable syncthing@$SERVICE_USER
+$SUDO_CMD systemctl enable media-pipeline
+$SUDO_CMD systemctl enable media-pipeline-web
+$SUDO_CMD systemctl enable nginx
 
 # Start services
-sudo systemctl start syncthing@$SERVICE_USER
+$SUDO_CMD systemctl start syncthing@$SERVICE_USER
 sleep 5  # Wait for Syncthing to start
-sudo systemctl start nginx
+$SUDO_CMD systemctl start nginx
 
 # Initialize database
 log "Initializing database..."
-sudo -u "$SERVICE_USER" "$PROJECT_DIR/venv/bin/python" "$PROJECT_DIR/test_pipeline.py"
+$SUDO_CMD -u "$SERVICE_USER" "$PROJECT_DIR/venv/bin/python" "$PROJECT_DIR/test_pipeline.py"
 
 # Create setup completion script
 log "Creating setup completion script..."
-sudo -u "$SERVICE_USER" tee "$PROJECT_DIR/complete_setup.sh" > /dev/null <<EOF
+$SUDO_CMD -u "$SERVICE_USER" tee "$PROJECT_DIR/complete_setup.sh" > /dev/null <<EOF
 #!/bin/bash
 # Complete setup script - run this after configuring credentials
 
@@ -416,28 +419,28 @@ if [ -f "$PROJECT_DIR/.env" ]; then
 fi
 
 # Start all services
-sudo systemctl start media-pipeline
-sudo systemctl start media-pipeline-web
+systemctl start media-pipeline
+systemctl start media-pipeline-web
 
 # Check service status
 echo "Service Status:"
-sudo systemctl status syncthing@$SERVICE_USER --no-pager -l
-sudo systemctl status media-pipeline --no-pager -l
-sudo systemctl status media-pipeline-web --no-pager -l
-sudo systemctl status nginx --no-pager -l
+systemctl status syncthing@$SERVICE_USER --no-pager -l
+systemctl status media-pipeline --no-pager -l
+systemctl status media-pipeline-web --no-pager -l
+systemctl status nginx --no-pager -l
 
 echo "Setup complete!"
 echo "Web UI available at: http://$(hostname -I | awk '{print $1}')"
 echo "Syncthing Web UI available at: http://$(hostname -I | awk '{print $1}'):$SYNCTHING_PORT"
 EOF
 
-sudo chmod +x "$PROJECT_DIR/complete_setup.sh"
+$SUDO_CMD chmod +x "$PROJECT_DIR/complete_setup.sh"
 
 # Final status check
 log "Installation completed successfully!"
 info "Next steps:"
 info "1. Edit $PROJECT_DIR/.env with your credentials"
-info "2. Run: sudo -u $SERVICE_USER $PROJECT_DIR/complete_setup.sh"
+info "2. Run: $PROJECT_DIR/complete_setup.sh"
 info "3. Access Web UI at: http://$(hostname -I | awk '{print $1}')"
 info "4. Access Syncthing at: http://$(hostname -I | awk '{print $1}'):$SYNCTHING_PORT"
 
