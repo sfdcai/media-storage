@@ -1,124 +1,203 @@
 #!/usr/bin/env python3
 """
-iCloud Cleanup & Folder Management Pipeline
-- Moves files after sync/compression
-- Adds files to iCloud album
-- Marks DB
+Enhanced iCloud Cleanup Module
+Moves files to delete pending album and prepares for deletion
 """
 
 import os
 import shutil
-import logging
-from pyicloud import PyiCloudService
-from pyicloud.exceptions import PyiCloudAPIResponseException
-import sqlite3
+import time
+from typing import List, Dict, Any
+from common import config_manager, db_manager, setup_module_logger, auth_manager
 
-# --- Config ---
-DB_FILE = "media.db"
-INCOMING_DIR = "/mnt/wd_all_pictures/incoming"
-PROCESSED_DIR = "/mnt/wd_all_pictures/processed"
-DELETE_PENDING_DIR = "/mnt/wd_all_pictures/delete_pending"
-ICLOUD_USERNAME = "tworedzebras@icloud.com"
-ICLOUD_PASSWORD = ""  # or set via environment variable
-ALBUM_NAME = "DeletePending"
+# Setup module-specific logger
+logger = setup_module_logger(__name__)
 
-# --- Logging ---
-LOG_DIR = "logs"
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, "cleanup.log")
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()]
-)
-logger = logging.getLogger("cleanup")
-
-# --- DB Functions ---
-def get_files_ready_for_cleanup():
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT id, filename, local_path
-        FROM media
-        WHERE status='downloaded' AND synced_google='yes' AND album_moved=0
-    """)
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-
-def mark_album_moved(media_id):
-    conn = sqlite3.connect(DB_FILE)
-    cur = conn.cursor()
-    cur.execute("UPDATE media SET album_moved=1 WHERE id=?", (media_id,))
-    conn.commit()
-    conn.close()
-
-# --- iCloud Functions ---
-def login_icloud(username, password):
-    api = PyiCloudService(username, password)
-    if api.requires_2fa:
-        logger.warning("iCloud 2FA required. Complete on device.")
-        code = input("Enter 2FA code: ")
-        result = api.validate_2fa_code(code)
-        if not result:
-            raise Exception("2FA failed")
-    return api
-
-def get_or_create_album(api, album_name):
-    albums = api.photos.albums
-    for a in albums.values():
-        if a.title == album_name:
-            return a
-    logger.info(f"Creating album: {album_name}")
-    return api.photos.create_album(album_name)
-
-# --- File Movement ---
-def move_file(src, dst_folder):
-    os.makedirs(dst_folder, exist_ok=True)
-    dst = os.path.join(dst_folder, os.path.basename(src))
-    shutil.move(src, dst)
-    return dst
-
-# --- Main Pipeline ---
-def main():
-    files = get_files_ready_for_cleanup()
-    if not files:
-        logger.info("No files ready for cleanup/moving.")
-        return
-
-    try:
-        icloud_api = login_icloud(ICLOUD_USERNAME, ICLOUD_PASSWORD)
-    except Exception as e:
-        logger.error(f"iCloud login failed: {e}")
-        return
-
-    album = get_or_create_album(icloud_api, ALBUM_NAME)
-
-    for media_id, filename, path in files:
-        if not os.path.exists(path):
-            logger.warning(f"File missing: {path}")
-            continue
-
-        # Move file to processed folder first
-        processed_path = move_file(path, PROCESSED_DIR)
-        logger.info(f"Moved {filename} → processed folder")
-
-        # Then move to delete_pending folder
-        delete_path = move_file(processed_path, DELETE_PENDING_DIR)
-        logger.info(f"Moved {filename} → delete_pending folder")
-
-        # Add to iCloud album
+class ICloudCleanupManager:
+    """Manages iCloud cleanup operations"""
+    
+    def __init__(self):
+        self.config = config_manager.get_icloud_config()
+        self.dir_config = config_manager.get_directory_config()
+        self.db = db_manager
+        self.max_retries = 3
+        self.retry_delay = 5  # seconds
+    
+    def validate_icloud_connection(self) -> bool:
+        """Validate iCloud connection"""
+        return auth_manager.test_icloud_connection()
+    
+    def get_files_ready_for_cleanup(self) -> List[Dict[str, Any]]:
+        """Get files ready for iCloud cleanup"""
+        return self.db.get_media_ready_for_cleanup()
+    
+    def move_file(self, src_path: str, dst_folder: str) -> str:
+        """Move file to destination folder"""
+        os.makedirs(dst_folder, exist_ok=True)
+        dst_path = os.path.join(dst_folder, os.path.basename(src_path))
+        shutil.move(src_path, dst_path)
+        return dst_path
+    
+    def add_file_to_icloud_album(self, file_path: str, album_name: str) -> bool:
+        """Add file to iCloud album"""
         try:
-            album.add(delete_path)
-            logger.info(f"Added {filename} to iCloud album {ALBUM_NAME}")
-        except PyiCloudAPIResponseException as e:
-            logger.error(f"Failed to add {filename} to iCloud album: {e}")
+            album = auth_manager.get_or_create_icloud_album(album_name)
+            if not album:
+                logger.error(f"Failed to get/create iCloud album: {album_name}")
+                return False
+            
+            album.add(file_path)
+            logger.info(f"Added {os.path.basename(file_path)} to iCloud album {album_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to add file to iCloud album: {e}")
+            return False
+    
+    def cleanup_file(self, file_info: Dict[str, Any]) -> bool:
+        """Clean up a single file"""
+        filename = file_info['filename']
+        local_path = file_info['local_path']
+        icloud_id = file_info['icloud_id']
+        
+        try:
+            if not os.path.exists(local_path):
+                logger.warning(f"File not found: {local_path}")
+                return False
+            
+            # Move file to processed folder first
+            processed_path = self.move_file(local_path, self.dir_config.processed)
+            logger.info(f"Moved {filename} → processed folder")
+            
+            # Then move to delete_pending folder
+            delete_path = self.move_file(processed_path, self.dir_config.delete_pending)
+            logger.info(f"Moved {filename} → delete_pending folder")
+            
+            # Add to iCloud album
+            if self.add_file_to_icloud_album(delete_path, self.config.album_name):
+                # Update database
+                if self.db.mark_album_moved(icloud_id):
+                    logger.info(f"✅ Successfully cleaned up: {filename}")
+                    return True
+                else:
+                    logger.error(f"Failed to update database for: {filename}")
+                    return False
+            else:
+                logger.error(f"Failed to add {filename} to iCloud album")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error cleaning up {filename}: {e}")
+            self.db.increment_error_count(icloud_id, f"Cleanup error: {str(e)}")
+            return False
+    
+    def cleanup_batch(self) -> Dict[str, int]:
+        """Clean up a batch of files"""
+        results = {
+            'total_files': 0,
+            'successful': 0,
+            'failed': 0,
+            'skipped': 0
+        }
+        
+        files = self.get_files_ready_for_cleanup()
+        results['total_files'] = len(files)
+        
+        if not files:
+            logger.info("No files ready for cleanup")
+            return results
+        
+        logger.info(f"Found {len(files)} files ready for cleanup")
+        
+        for file_info in files:
+            filename = file_info['filename']
+            icloud_id = file_info['icloud_id']
+            
+            # Check if already processed
+            if file_info.get('album_moved') == 1:
+                results['skipped'] += 1
+                continue
+            
+            success = False
+            for attempt in range(self.max_retries):
+                try:
+                    if self.cleanup_file(file_info):
+                        results['successful'] += 1
+                        success = True
+                        break
+                    else:
+                        logger.warning(f"Cleanup failed for {filename} (attempt {attempt + 1})")
+                        
+                except Exception as e:
+                    logger.error(f"Error during cleanup attempt {attempt + 1} for {filename}: {e}")
+                
+                if attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay)
+            
+            if not success:
+                results['failed'] += 1
+                self.db.increment_error_count(icloud_id, f"Cleanup failed after {self.max_retries} attempts")
+        
+        return results
+    
+    def get_cleanup_stats(self) -> Dict[str, Any]:
+        """Get cleanup statistics"""
+        try:
+            stats = self.db.get_pipeline_stats()
+            cleanup_stats = {
+                'total_files': stats.get('total', 0),
+                'album_moved': stats.get('album_moved', 0),
+                'pending_cleanup': stats.get('total', 0) - stats.get('album_moved', 0),
+                'icloud_connected': self.validate_icloud_connection(),
+                'album_name': self.config.album_name
+            }
+            return cleanup_stats
+        except Exception as e:
+            logger.error(f"Error getting cleanup stats: {e}")
+            return {}
 
-        # Update DB
-        mark_album_moved(media_id)
-
-    logger.info("✅ Cleanup and album assignment complete.")
-
+def main():
+    """Main iCloud cleanup pipeline"""
+    logger.info("Starting iCloud cleanup pipeline...")
+    
+    # Validate configuration
+    if not config_manager.validate_config():
+        logger.error("Configuration validation failed")
+        return False
+    
+    # Initialize database
+    db_manager.init_database()
+    
+    # Create cleanup manager
+    cleanup_manager = ICloudCleanupManager()
+    
+    # Validate iCloud connection
+    if not cleanup_manager.validate_icloud_connection():
+        logger.error("iCloud connection validation failed")
+        return False
+    
+    # Perform batch cleanup
+    results = cleanup_manager.cleanup_batch()
+    
+    # Log results
+    logger.info(f"iCloud cleanup completed:")
+    logger.info(f"  Total files: {results['total_files']}")
+    logger.info(f"  Successful: {results['successful']}")
+    logger.info(f"  Failed: {results['failed']}")
+    logger.info(f"  Skipped: {results['skipped']}")
+    
+    # Get and log statistics
+    stats = cleanup_manager.get_cleanup_stats()
+    logger.info(f"iCloud cleanup statistics: {stats}")
+    
+    success = results['failed'] == 0
+    if success:
+        logger.info("✅ iCloud cleanup pipeline completed successfully")
+    else:
+        logger.warning(f"⚠️ iCloud cleanup completed with {results['failed']} failures")
+    
+    return success
 
 if __name__ == "__main__":
-    main()
+    success = main()
+    exit(0 if success else 1)

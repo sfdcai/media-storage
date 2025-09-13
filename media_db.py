@@ -1,79 +1,38 @@
-import sqlite3
-import logging
-import os
+#!/usr/bin/env python3
+"""
+Legacy Database Module - DEPRECATED
+This module is kept for backward compatibility but should use common.database instead
+"""
 
-LOG_FILE = os.getenv("SYNC_LOG_FILE", "sync.log")
+import warnings
+from common import db_manager, get_logger
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_FILE, mode="a", encoding="utf-8"),
-        logging.StreamHandler()
-    ]
+logger = get_logger(__name__)
+
+# Issue deprecation warning
+warnings.warn(
+    "media_db.py is deprecated. Use common.database.db_manager instead.",
+    DeprecationWarning,
+    stacklevel=2
 )
 
-logger = logging.getLogger(__name__)
-
-DB_FILE = "media.db"
-
-
+# Legacy function wrappers for backward compatibility
 def get_connection():
-    return sqlite3.connect(DB_FILE)
-
+    """Legacy function - use db_manager.get_connection() instead"""
+    warnings.warn("get_connection() is deprecated. Use db_manager.get_connection() instead.", DeprecationWarning)
+    return db_manager.get_connection()
 
 def init_db():
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS media (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            filename TEXT NOT NULL,
-            icloud_id TEXT UNIQUE,
-            created_date TEXT,
-            local_path TEXT,
-            status TEXT DEFAULT 'downloaded',
-            synced_google TEXT,
-            compressed TEXT,
-            deleted_icloud TEXT,
-            album_moved INTEGER DEFAULT 0,
-            last_updated TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-    """)
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_filename ON media(filename);")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_icloud_id ON media(icloud_id);")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_status ON media(status);")
-    conn.commit()
-    conn.close()
-    logger.info("✅ Database initialized.")
-
+    """Legacy function - use db_manager.init_database() instead"""
+    warnings.warn("init_db() is deprecated. Use db_manager.init_database() instead.", DeprecationWarning)
+    return db_manager.init_database()
 
 def add_media_record(filename, icloud_id, created_date, local_path, status="downloaded"):
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT OR IGNORE INTO media (filename, icloud_id, created_date, local_path, status)
-            VALUES (?, ?, ?, ?, ?)
-        """, (filename, icloud_id, created_date, local_path, status))
-        conn.commit()
-        conn.close()
-        logger.info(f"📥 Added/exists: {filename}")
-    except Exception as e:
-        logger.error(f"❌ Error inserting {filename}: {str(e)}")
-
+    """Legacy function - use db_manager.add_media_record() instead"""
+    warnings.warn("add_media_record() is deprecated. Use db_manager.add_media_record() instead.", DeprecationWarning)
+    return db_manager.add_media_record(filename, icloud_id, created_date, local_path, status)
 
 def update_status(icloud_id, field, value):
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute(f"""
-            UPDATE media
-            SET {field} = ?, last_updated = CURRENT_TIMESTAMP
-            WHERE icloud_id = ?
-        """, (value, icloud_id))
-        conn.commit()
-        conn.close()
-        logger.info(f"🔄 Updated {icloud_id}: {field} = {value}")
-    except Exception as e:
-        logger.error(f"❌ Error updating {icloud_id}: {str(e)}")
+    """Legacy function - use db_manager.update_media_field() instead"""
+    warnings.warn("update_status() is deprecated. Use db_manager.update_media_field() instead.", DeprecationWarning)
+    return db_manager.update_media_field(icloud_id, field, value)

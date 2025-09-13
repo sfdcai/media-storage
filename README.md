@@ -4,8 +4,8 @@
 
 This project is an automated pipeline for managing a personal media library. Its primary goals are:
 1.  **Download**: Securely pull all photos and videos from iCloud.
-2.  **Backup**: Sync all media to Google Photos for a permanent, cloud-based backup (leveraging a Pixel device for original quality uploads).
-3.  **Optimize**: Apply tiered compression to local files based on their age to save storage space.
+2.  **Backup**: Sync all media to Google Photos for a permanent, cloud-based backup (leveraging a Pixel device for original quality uploads) and sync to NAS folder also for archival so we have 2 copies of the media. One in cloud and one locally available.
+3.  **Optimize**: Apply tiered compression to local files based on their age to save storage space. this will be configuration based and can be configured easily.
 4.  **Cleanup**: Safely delete the original files from iCloud after they have been backed up and processed, freeing up iCloud storage.
 
 A central SQLite database (`media.db`) acts as the single source of truth, tracking the state of each media file as it moves through the pipeline.
@@ -20,8 +20,8 @@ The pipeline is a series of stages, each executed by a dedicated Python script. 
 graph TD
     A[Start: iCloud Photos] -->|sync_icloud.py| B(1. Download to Local);
     B --> C{DB: status='downloaded'};
-    C -->|bulk_pixel_sync.py| D(2. Sync to Pixel/Google Photos);
-    D --> E{DB: synced_google='yes'};
+    C -->|bulk_pixel_sync.py| D(2. Sync to Pixel/Google Photos and NAS for Archive);
+    D --> E{DB: synced_google='yes' and synced_NAS='yes'};
     E -->|compress_media.py| F(3. Compress Local File);
     F --> G{DB: last_compressed=date};
     G -->|cleanup_icloud.py| H(4. Move File & Add to 'DeletePending' Album);
@@ -34,7 +34,8 @@ graph TD
 ### Directory Structure
 
 -   `/mnt/wd_all_pictures/incoming`: Landing zone for new files from iCloud.
--   `/mnt/wd_all_pictures/processed`: Stores files that have been backed up to Google Photos and compressed.
+-   `/mnt/wd_all_pictures/backup`: Stores files that needs to be synced with Pixel and NAS and have been backed up.
+-   `/mnt/wd_all_pictures/compress`: Stores files that needs to be compressed.
 -   `/mnt/wd_all_pictures/delete_pending`: A temporary holding area for files that are ready for deletion from iCloud.
 
 ---
@@ -76,19 +77,24 @@ The scripts are designed to be run in the following sequence.
 
 ### Stage 2: `bulk_pixel_sync.py`
 
-*   **Purpose**: Marks files as backed up to Google Photos. It relies on `Syncthing` to move files from the server to the Pixel device.
+*   **Purpose**: Marks files as backed up to Google Photos. It relies on `Syncthing` to move files from the server to the Pixel device. 
 *   **Action**:
     1.  Connects to the Syncthing API on the Pixel device.
     2.  Fetches a list of files that are fully synced.
     3.  Updates the `media` table, setting `synced_google='yes'` for matching filenames.
     4.  (Optional) Deletes the file from the Pixel device's local storage to save space.
 *   **Prerequisites**: Syncthing running on server and Pixel, Syncthing API key.
+### Stage 3: `bulk_nas_sync.py`
 
-### Stage 3: `compress_media.py`
-
-*   **Purpose**: Compresses local media files that have been successfully backed up to Google Photos.
+*   **Purpose**: Marks files as backed up to NAS.  
 *   **Action**:
-    1.  Selects files where `synced_google='yes'`.
+    1. Updates the `media` table, setting `nas_google='yes'` for matching filenames.
+*   **Prerequisites**: 
+### Stage 4: `compress_media.py`
+
+*   **Purpose**: Compresses local media files that have been successfully backed up to Google Photos and NAS.
+*   **Action**:
+    1.  Selects files where `synced_google='yes' && nas_google='yes'`.
     2.  Applies tiered compression based on the media's age:
         *   **< 1 year old**: Light compression.
         *   **1-3 years old**: Medium compression.

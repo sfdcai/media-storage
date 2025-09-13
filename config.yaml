@@ -1,0 +1,61 @@
+# Media Pipeline Configuration
+# This file contains all configuration settings for the media backup pipeline
+
+# Database configuration
+database:
+  file_path: "media.db"
+  backup_enabled: true
+  backup_interval_hours: 24
+
+# iCloud configuration
+icloud:
+  username: ""  # Set via environment variable ICLOUD_USERNAME
+  password: ""  # Set via environment variable ICLOUD_PASSWORD
+  directory: "/mnt/wd_all_pictures/incoming"
+  days: 0  # Download files from last N days (0 = all)
+  recent: 0  # Alternative to days
+  auto_delete: false
+  album_name: "DeletePending"
+
+# Syncthing configuration
+syncthing:
+  api_key: ""  # Set via environment variable SYNCTHING_API_KEY
+  base_url: "http://192.168.1.118:8384/rest"
+  folder_id: "default"
+  pixel_local_folder: "/storage/emulated/0/DCIM/Syncthing"
+  delete_local_pixel: true
+  timeout_seconds: 30
+  max_retries: 3
+
+# NAS configuration
+nas:
+  mount_path: "/mnt/nas_backup"
+  sync_enabled: true
+  delete_after_sync: false
+
+# Compression configuration
+compression:
+  enabled: true
+  light_quality: 85    # Image quality for files < 1 year old
+  medium_quality: 75   # Image quality for files 1-3 years old
+  heavy_quality: 65    # Image quality for files > 3 years old
+  light_crf: 26        # Video CRF for files < 1 year old
+  medium_crf: 28       # Video CRF for files 1-3 years old
+  heavy_crf: 30        # Video CRF for files > 3 years old
+
+# Logging configuration
+logging:
+  level: "INFO"
+  log_dir: "logs"
+  log_file: "media_pipeline.log"
+  max_file_size_mb: 10
+  backup_count: 5
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
+# Directory structure
+directories:
+  incoming: "/mnt/wd_all_pictures/incoming"
+  backup: "/mnt/wd_all_pictures/backup"
+  compress: "/mnt/wd_all_pictures/compress"
+  delete_pending: "/mnt/wd_all_pictures/delete_pending"
+  processed: "/mnt/wd_all_pictures/processed"
