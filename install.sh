@@ -94,7 +94,7 @@ fi
 log "Creating service user: $SERVICE_USER"
 if ! id "$SERVICE_USER" &>/dev/null; then
     $SUDO_CMD useradd -r -s /bin/bash -d "$PROJECT_DIR" -m "$SERVICE_USER"
-    $SUDO_CMD usermod -aG sudo "$SERVICE_USER"
+    # Don't add to sudo group for security
 fi
 
 # Create directories
@@ -118,8 +118,10 @@ $SUDO_CMD chmod 755 "$LOG_DIR"
 # Install Syncthing
 log "Installing Syncthing..."
 if ! command -v syncthing &> /dev/null; then
-    curl -s https://syncthing.net/release-key.txt | $SUDO_CMD apt-key add -
-    echo "deb https://apt.syncthing.net/ syncthing stable" | $SUDO_CMD tee /etc/apt/sources.list.d/syncthing.list
+    # Use modern GPG key installation method
+    $SUDO_CMD mkdir -p /etc/apt/keyrings
+    curl -s https://syncthing.net/release-key.txt | $SUDO_CMD gpg --dearmor -o /etc/apt/keyrings/syncthing-archive-keyring.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/syncthing-archive-keyring.gpg] https://apt.syncthing.net/ syncthing stable" | $SUDO_CMD tee /etc/apt/sources.list.d/syncthing.list
     $SUDO_CMD apt update
     $SUDO_CMD apt install -y syncthing
 fi
@@ -133,6 +135,11 @@ $SUDO_CMD chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR"
 
 # Create Python virtual environment
 log "Setting up Python virtual environment..."
+# Verify service user exists
+if ! id "$SERVICE_USER" &>/dev/null; then
+    error "Service user $SERVICE_USER does not exist. Cannot continue."
+    exit 1
+fi
 $SU_CMD "$SERVICE_USER" -c "python3.11 -m venv $PROJECT_DIR/venv"
 $SU_CMD "$SERVICE_USER" -c "$PROJECT_DIR/venv/bin/pip install --upgrade pip"
 
@@ -247,7 +254,16 @@ EOF
 
 # Create cron job for regular pipeline execution
 log "Setting up cron job..."
-$SU_CMD "$SERVICE_USER" -c "crontab -l 2>/dev/null" | { cat; echo "0 2 * * * cd $PROJECT_DIR && $PROJECT_DIR/venv/bin/python $PROJECT_DIR/pipeline_orchestrator.py >> $LOG_DIR/cron.log 2>&1"; } | $SU_CMD "$SERVICE_USER" -c "crontab -"
+# Ensure cron directory has proper permissions
+$SUDO_CMD mkdir -p /var/spool/cron/crontabs
+$SUDO_CMD chown root:crontab /var/spool/cron/crontabs
+$SUDO_CMD chmod 755 /var/spool/cron/crontabs
+
+# Create cron job using a temporary file
+CRON_TEMP="/tmp/media_pipeline_cron"
+echo "0 2 * * * cd $PROJECT_DIR && $PROJECT_DIR/venv/bin/python $PROJECT_DIR/pipeline_orchestrator.py >> $LOG_DIR/cron.log 2>&1" > "$CRON_TEMP"
+$SU_CMD "$SERVICE_USER" -c "crontab $CRON_TEMP"
+$SUDO_CMD rm -f "$CRON_TEMP"
 
 # Configure Nginx for Web UI
 log "Configuring Nginx..."
@@ -382,18 +398,15 @@ if [ ! -f "$PROJECT_DIR/.env" ]; then
     warn "Please edit $PROJECT_DIR/.env with your actual credentials"
 fi
 
-# Reload systemd and start services
-log "Reloading systemd and starting services..."
+# Reload systemd and enable services
+log "Reloading systemd and enabling services..."
 $SUDO_CMD systemctl daemon-reload
 $SUDO_CMD systemctl enable syncthing@$SERVICE_USER
 $SUDO_CMD systemctl enable media-pipeline
 $SUDO_CMD systemctl enable media-pipeline-web
 $SUDO_CMD systemctl enable nginx
 
-# Start services
-$SUDO_CMD systemctl start syncthing@$SERVICE_USER
-sleep 5  # Wait for Syncthing to start
-$SUDO_CMD systemctl start nginx
+# Note: Services will be started by the complete_setup.sh script after configuration
 
 # Initialize database
 log "Initializing database..."
@@ -413,6 +426,9 @@ if [ -f "$PROJECT_DIR/.env" ]; then
 fi
 
 # Start all services
+systemctl start syncthing@$SERVICE_USER
+sleep 5  # Wait for Syncthing to start
+systemctl start nginx
 systemctl start media-pipeline
 systemctl start media-pipeline-web
 
