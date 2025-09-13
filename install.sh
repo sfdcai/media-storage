@@ -521,12 +521,27 @@ systemctl start nginx
 systemctl start media-pipeline
 systemctl start media-pipeline-web
 
+# Start scheduled execution (timer or cron)
+if systemctl list-timers | grep -q "media-pipeline-daily.timer"; then
+    echo "Starting systemd timer..."
+    systemctl start media-pipeline-daily.timer
+else
+    echo "Using cron for scheduled execution"
+fi
+
 # Check service status
 echo "Service Status:"
 systemctl status syncthing@$SERVICE_USER --no-pager -l
 systemctl status media-pipeline --no-pager -l
 systemctl status media-pipeline-web --no-pager -l
 systemctl status nginx --no-pager -l
+
+# Check timer status if using systemd timer
+if systemctl list-timers | grep -q "media-pipeline-daily.timer"; then
+    echo "Timer Status:"
+    systemctl status media-pipeline-daily.timer --no-pager -l
+    systemctl list-timers | grep media-pipeline
+fi
 
 echo "Setup complete!"
 echo "Web UI available at: http://$(hostname -I | awk '{print $1}')"
