@@ -9,6 +9,7 @@ import sys
 import tempfile
 import shutil
 from pathlib import Path
+from typing import Dict
 from common import config_manager, db_manager, setup_module_logger, auth_manager
 
 # Setup module-specific logger
