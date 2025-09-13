@@ -33,7 +33,7 @@ info() {
 if [[ $EUID -eq 0 ]]; then
    warn "Running as root - will use su for user switching"
    SUDO_CMD=""
-   SU_CMD="su -s /bin/bash -c"
+   SU_CMD="su -s /bin/bash"
 else
    SUDO_CMD="sudo"
    SU_CMD="sudo -u"
@@ -133,8 +133,8 @@ $SUDO_CMD chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR"
 
 # Create Python virtual environment
 log "Setting up Python virtual environment..."
-$SU_CMD "$SERVICE_USER" "python3.11 -m venv $PROJECT_DIR/venv"
-$SU_CMD "$SERVICE_USER" "$PROJECT_DIR/venv/bin/pip install --upgrade pip"
+$SU_CMD "$SERVICE_USER" -c "python3.11 -m venv $PROJECT_DIR/venv"
+$SU_CMD "$SERVICE_USER" -c "$PROJECT_DIR/venv/bin/pip install --upgrade pip"
 
 # Install Python packages in virtual environment
 log "Installing Python packages in virtual environment..."
@@ -142,12 +142,12 @@ log "Installing Python packages in virtual environment..."
 # Install requirements from requirements.txt if it exists
 if [ -f "$PROJECT_DIR/requirements.txt" ]; then
     log "Installing requirements from requirements.txt..."
-    $SU_CMD "$SERVICE_USER" "$PROJECT_DIR/venv/bin/pip install -r $PROJECT_DIR/requirements.txt"
+    $SU_CMD "$SERVICE_USER" -c "$PROJECT_DIR/venv/bin/pip install -r $PROJECT_DIR/requirements.txt"
 fi
 
 # Install icloudpd (not in requirements.txt)
 log "Installing icloudpd..."
-$SU_CMD "$SERVICE_USER" "$PROJECT_DIR/venv/bin/pip install icloudpd"
+$SU_CMD "$SERVICE_USER" -c "$PROJECT_DIR/venv/bin/pip install icloudpd"
 
 # Create systemd service for Syncthing
 log "Creating Syncthing systemd service..."
@@ -247,7 +247,7 @@ EOF
 
 # Create cron job for regular pipeline execution
 log "Setting up cron job..."
-$SU_CMD "$SERVICE_USER" "crontab -l 2>/dev/null" | { cat; echo "0 2 * * * cd $PROJECT_DIR && $PROJECT_DIR/venv/bin/python $PROJECT_DIR/pipeline_orchestrator.py >> $LOG_DIR/cron.log 2>&1"; } | $SU_CMD "$SERVICE_USER" "crontab -"
+$SU_CMD "$SERVICE_USER" -c "crontab -l 2>/dev/null" | { cat; echo "0 2 * * * cd $PROJECT_DIR && $PROJECT_DIR/venv/bin/python $PROJECT_DIR/pipeline_orchestrator.py >> $LOG_DIR/cron.log 2>&1"; } | $SU_CMD "$SERVICE_USER" -c "crontab -"
 
 # Configure Nginx for Web UI
 log "Configuring Nginx..."
@@ -282,7 +282,7 @@ $SUDO_CMD rm -f /etc/nginx/sites-enabled/default
 
 # Create default configuration
 log "Creating default configuration..."
-$SU_CMD "$SERVICE_USER" "tee $CONFIG_DIR/config.yaml > /dev/null" <<EOF
+$SU_CMD "$SERVICE_USER" -c "tee $CONFIG_DIR/config.yaml > /dev/null" <<EOF
 # Media Pipeline Configuration
 database:
   file_path: "$PROJECT_DIR/media.db"
@@ -353,7 +353,7 @@ EOF
 
 # Create environment file template
 log "Creating environment file template..."
-$SU_CMD "$SERVICE_USER" "tee $PROJECT_DIR/.env.template > /dev/null" <<EOF
+$SU_CMD "$SERVICE_USER" -c "tee $PROJECT_DIR/.env.template > /dev/null" <<EOF
 # Media Pipeline Environment Variables
 # Copy this file to .env and fill in your values
 
@@ -378,7 +378,7 @@ EOF
 
 # Set up environment file
 if [ ! -f "$PROJECT_DIR/.env" ]; then
-    $SU_CMD "$SERVICE_USER" "cp $PROJECT_DIR/.env.template $PROJECT_DIR/.env"
+    $SU_CMD "$SERVICE_USER" -c "cp $PROJECT_DIR/.env.template $PROJECT_DIR/.env"
     warn "Please edit $PROJECT_DIR/.env with your actual credentials"
 fi
 
@@ -397,11 +397,11 @@ $SUDO_CMD systemctl start nginx
 
 # Initialize database
 log "Initializing database..."
-$SU_CMD "$SERVICE_USER" "$PROJECT_DIR/venv/bin/python $PROJECT_DIR/test_pipeline.py"
+$SU_CMD "$SERVICE_USER" -c "$PROJECT_DIR/venv/bin/python $PROJECT_DIR/test_pipeline.py"
 
 # Create setup completion script
 log "Creating setup completion script..."
-$SU_CMD "$SERVICE_USER" "tee $PROJECT_DIR/complete_setup.sh > /dev/null" <<EOF
+$SU_CMD "$SERVICE_USER" -c "tee $PROJECT_DIR/complete_setup.sh > /dev/null" <<EOF
 #!/bin/bash
 # Complete setup script - run this after configuring credentials
 
