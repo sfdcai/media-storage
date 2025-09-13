@@ -116,6 +116,8 @@ log "Creating project directories..."
 $SUDO_CMD mkdir -p "$PROJECT_DIR"
 $SUDO_CMD mkdir -p "$LOG_DIR"
 $SUDO_CMD mkdir -p "$CONFIG_DIR"
+$SUDO_CMD chown "$SERVICE_USER:$SERVICE_USER" "$CONFIG_DIR"
+$SUDO_CMD chmod 755 "$CONFIG_DIR"
 $SUDO_CMD mkdir -p "/mnt/wd_all_pictures/incoming"
 $SUDO_CMD mkdir -p "/mnt/wd_all_pictures/backup"
 $SUDO_CMD mkdir -p "/mnt/wd_all_pictures/compress"
@@ -387,7 +389,7 @@ $SUDO_CMD rm -f /etc/nginx/sites-enabled/default
 
 # Create default configuration
 log "Creating default configuration..."
-$SU_CMD "$SERVICE_USER" -c "tee $CONFIG_DIR/config.yaml > /dev/null" <<EOF
+$SUDO_CMD tee "$CONFIG_DIR/config.yaml" > /dev/null <<EOF
 # Media Pipeline Configuration
 database:
   file_path: "$PROJECT_DIR/media.db"
@@ -455,6 +457,10 @@ web_ui:
   debug: false
   auto_reload: false
 EOF
+
+# Set proper ownership of config file
+$SUDO_CMD chown "$SERVICE_USER:$SERVICE_USER" "$CONFIG_DIR/config.yaml"
+$SUDO_CMD chmod 644 "$CONFIG_DIR/config.yaml"
 
 # Create environment file template
 log "Creating environment file template..."
