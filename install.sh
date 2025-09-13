@@ -222,10 +222,83 @@ log "Installing Syncthing..."
 if ! command -v syncthing &> /dev/null; then
     # Use modern GPG key installation method
     $SUDO_CMD mkdir -p /etc/apt/keyrings
+    
+    # Remove old keyring if it exists
+    $SUDO_CMD rm -f /etc/apt/keyrings/syncthing-archive-keyring.gpg
+    $SUDO_CMD rm -f /etc/apt/sources.list.d/syncthing.list
+    
+    # Add new keyring
     curl -s https://syncthing.net/release-key.txt | $SUDO_CMD gpg --dearmor -o /etc/apt/keyrings/syncthing-archive-keyring.gpg
     echo "deb [signed-by=/etc/apt/keyrings/syncthing-archive-keyring.gpg] https://apt.syncthing.net/ syncthing stable" | $SUDO_CMD tee /etc/apt/sources.list.d/syncthing.list
+    
+    # Update package lists
     $SUDO_CMD apt update
+    
+    # Install Syncthing
     $SUDO_CMD apt install -y syncthing
+    log "Syncthing installed successfully"
+else
+    log "Syncthing is already installed"
+fi
+
+# Check if this is a headless system (no GUI)
+if [ -z "$DISPLAY" ] && [ ! -f /.dockerenv ] && [ ! -f /run/.containerenv ]; then
+    # Check if we're in a container or headless system
+    if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q "container=lxc" /proc/1/environ 2>/dev/null || [ -d /proc/vz ] && [ ! -d /proc/bc ]; then
+        info "Headless container detected - skipping GUI applications"
+        info "For code editing, consider installing VS Code Server:"
+        info "  Run: ./install_vscode_server.sh"
+    else
+        # Check if X11 is available
+        if ! command -v xset &> /dev/null && ! command -v xrandr &> /dev/null; then
+            info "No GUI environment detected - skipping GUI applications"
+            info "For code editing, consider installing VS Code Server:"
+            info "  Run: ./install_vscode_server.sh"
+        else
+            # Install Cursor for systems with GUI
+            log "Installing Cursor IDE..."
+            if ! command -v cursor &> /dev/null; then
+                debug "Attempting to install Cursor IDE..."
+                
+                # Remove old repository if it exists
+                $SUDO_CMD rm -f /etc/apt/sources.list.d/cursor.list
+                $SUDO_CMD rm -f /usr/share/keyrings/cursor-archive-keyring.gpg
+                
+                # Try to add Cursor repository
+                if curl -fsSL https://download.todesktop.com/210313leazlircz/linux/ubuntu/gpg.key | $SUDO_CMD gpg --dearmor -o /usr/share/keyrings/cursor-archive-keyring.gpg 2>/dev/null; then
+                    echo 'deb [signed-by=/usr/share/keyrings/cursor-archive-keyring.gpg] https://download.todesktop.com/210313leazlircz/linux/ubuntu jammy main' | $SUDO_CMD tee /etc/apt/sources.list.d/cursor.list
+                    
+                    # Update package lists
+                    if $SUDO_CMD apt update 2>/dev/null; then
+                        if $SUDO_CMD apt install -y cursor 2>/dev/null; then
+                            log "Cursor IDE installed successfully"
+                        else
+                            warn "Failed to install Cursor from repository, trying manual installation..."
+                            # Try manual installation
+                            if wget -q https://download.todesktop.com/210313leazlircz/linux/ubuntu/cursor_0.42.0_amd64.deb 2>/dev/null; then
+                                $SUDO_CMD dpkg -i cursor_0.42.0_amd64.deb 2>/dev/null || $SUDO_CMD apt-get install -f -y
+                                $SUDO_CMD rm -f cursor_0.42.0_amd64.deb
+                                log "Cursor IDE installed manually"
+                            else
+                                warn "Could not install Cursor IDE. You can install it manually later."
+                            fi
+                        fi
+                    else
+                        warn "Could not update package lists for Cursor. Skipping Cursor installation."
+                    fi
+                else
+                    warn "Could not add Cursor repository. Skipping Cursor installation."
+                    info "You can install Cursor manually or use VS Code Server instead."
+                fi
+            else
+                log "Cursor IDE is already installed"
+            fi
+        fi
+    fi
+else
+    info "GUI environment detected - skipping Cursor installation for headless systems"
+    info "For code editing, consider installing VS Code Server:"
+    info "  Run: ./install_vscode_server.sh"
 fi
 
 # Note: Python packages will be installed in virtual environment below
