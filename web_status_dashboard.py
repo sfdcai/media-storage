@@ -42,6 +42,7 @@ class ServiceStatusChecker:
     def check_systemctl_service(self, service_name):
         """Check if a systemd service is active"""
         try:
+            # Try systemctl first
             result = subprocess.run(
                 ["systemctl", "is-active", service_name],
                 capture_output=True,
@@ -53,6 +54,36 @@ class ServiceStatusChecker:
                 "running": result.returncode == 0,
                 "output": result.stdout.strip()
             }
+        except FileNotFoundError:
+            # systemctl not available, check processes instead
+            try:
+                # Map service names to process names
+                process_map = {
+                    "media-pipeline": "pipeline_orchestrator.py",
+                    "media-pipeline-web": "web_ui.py",
+                    "syncthing@media-pipeline": "syncthing",
+                    "nginx": "nginx"
+                }
+                
+                process_name = process_map.get(service_name, service_name)
+                result = subprocess.run(
+                    ["pgrep", "-f", process_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                is_running = result.returncode == 0
+                return {
+                    "status": "active" if is_running else "inactive",
+                    "running": is_running,
+                    "output": "Process found" if is_running else "Process not found"
+                }
+            except Exception as e:
+                return {
+                    "status": "error",
+                    "running": False,
+                    "output": f"Error checking process: {str(e)}"
+                }
         except Exception as e:
             return {
                 "status": "error",
@@ -195,16 +226,28 @@ class ServiceStatusChecker:
                 )
                 return result.stdout.strip() if result.returncode == 0 else "No logs available"
         except FileNotFoundError:
-            # journalctl not available, try alternative methods
+            # journalctl/systemctl not available, try log files
             try:
-                # Try systemctl status
-                result = subprocess.run(
-                    ["systemctl", "status", service_name, "--no-pager", "-l"],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                return result.stdout.strip() if result.returncode == 0 else "No logs available"
+                # Map service names to log files
+                log_map = {
+                    "media-pipeline": "/var/log/media-pipeline/media_pipeline.log",
+                    "media-pipeline-web": "/var/log/media-pipeline/web_ui.log",
+                    "syncthing@media-pipeline": "/var/log/media-pipeline/syncthing.log",
+                    "nginx": "/var/log/nginx/error.log"
+                }
+                
+                log_file = log_map.get(service_name)
+                if log_file and os.path.exists(log_file):
+                    # Get last N lines from log file
+                    result = subprocess.run(
+                        ["tail", "-n", str(lines), log_file],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    return result.stdout.strip() if result.returncode == 0 else "Error reading log file"
+                else:
+                    return f"Log file not found: {log_file}"
             except Exception as e:
                 return f"Logs not available: {str(e)}"
         except Exception as e:
