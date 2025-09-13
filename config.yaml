@@ -46,7 +46,7 @@ compression:
 # Logging configuration
 logging:
   level: "INFO"
-  log_dir: "logs"
+  log_dir: "/var/log/media-pipeline"
   log_file: "media_pipeline.log"
   max_file_size_mb: 10
   backup_count: 5
@@ -59,3 +59,19 @@ directories:
   compress: "/mnt/wd_all_pictures/compress"
   delete_pending: "/mnt/wd_all_pictures/delete_pending"
   processed: "/mnt/wd_all_pictures/processed"
+
+# Web UI configuration
+web_ui:
+  host: "127.0.0.1"
+  port: 8081  # Changed from 8080 to avoid conflict with VS Code Server
+  debug: false
+  auto_reload: false
+
+# Telegram notifications
+telegram:
+  bot_token: ""  # Set via environment variable TELEGRAM_BOT_TOKEN
+  chat_id: ""    # Set via environment variable TELEGRAM_CHAT_ID
+  enabled: true
+  notify_on_completion: true
+  notify_on_error: true
+  notify_on_start: true
