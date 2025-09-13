@@ -3,7 +3,7 @@
 
 # Database configuration
 database:
-  file_path: "media.db"
+  file_path: "/opt/media-pipeline/media.db"
   backup_enabled: true
   backup_interval_hours: 24
 
