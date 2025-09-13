@@ -87,41 +87,81 @@ class ServiceStatusChecker:
     def get_system_info(self):
         """Get system information"""
         try:
-            # Get container IP
-            result = subprocess.run(
-                ["hostname", "-I"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            container_ip = result.stdout.strip().split()[0] if result.returncode == 0 else "unknown"
+            # Get container IP - try multiple methods
+            container_ip = "unknown"
+            try:
+                result = subprocess.run(
+                    ["hostname", "-I"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    container_ip = result.stdout.strip().split()[0]
+            except:
+                pass
+            
+            # Try alternative method for IP
+            if container_ip == "unknown":
+                try:
+                    result = subprocess.run(
+                        ["ip", "route", "get", "1"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.returncode == 0:
+                        container_ip = result.stdout.split()[6]
+                except:
+                    pass
             
             # Get uptime
-            with open('/proc/uptime', 'r') as f:
-                uptime_seconds = float(f.readline().split()[0])
-                uptime = str(int(uptime_seconds // 3600)) + "h " + str(int((uptime_seconds % 3600) // 60)) + "m"
+            uptime = "unknown"
+            try:
+                with open('/proc/uptime', 'r') as f:
+                    uptime_seconds = float(f.readline().split()[0])
+                    uptime = str(int(uptime_seconds // 3600)) + "h " + str(int((uptime_seconds % 3600) // 60)) + "m"
+            except:
+                pass
             
             # Get memory info
-            with open('/proc/meminfo', 'r') as f:
-                meminfo = f.read()
-                total_mem = int([line for line in meminfo.split('\n') if 'MemTotal' in line][0].split()[1]) // 1024
-                available_mem = int([line for line in meminfo.split('\n') if 'MemAvailable' in line][0].split()[1]) // 1024
+            total_mem = "unknown"
+            available_mem = "unknown"
+            try:
+                with open('/proc/meminfo', 'r') as f:
+                    meminfo = f.read()
+                    total_line = [line for line in meminfo.split('\n') if 'MemTotal' in line]
+                    available_line = [line for line in meminfo.split('\n') if 'MemAvailable' in line]
+                    
+                    if total_line:
+                        total_mem = f"{int(total_line[0].split()[1]) // 1024} MB"
+                    if available_line:
+                        available_mem = f"{int(available_line[0].split()[1]) // 1024} MB"
+            except:
+                pass
             
             # Get disk usage
-            result = subprocess.run(
-                ["df", "-h", "/"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            disk_usage = result.stdout.strip().split('\n')[1].split() if result.returncode == 0 else ["unknown"]
+            disk_usage = "unknown"
+            try:
+                result = subprocess.run(
+                    ["df", "-h", "/"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode == 0:
+                    lines = result.stdout.strip().split('\n')
+                    if len(lines) > 1:
+                        disk_usage = lines[1].split()[4]
+            except:
+                pass
             
             return {
                 "container_ip": container_ip,
                 "uptime": uptime,
-                "total_memory": f"{total_mem} MB",
-                "available_memory": f"{available_mem} MB",
-                "disk_usage": disk_usage[4] if len(disk_usage) > 4 else "unknown"
+                "total_memory": total_mem,
+                "available_memory": available_mem,
+                "disk_usage": disk_usage
             }
         except Exception as e:
             return {
@@ -136,13 +176,37 @@ class ServiceStatusChecker:
     def get_service_logs(self, service_name, lines=10):
         """Get recent logs for a service"""
         try:
+            # Try journalctl first
             result = subprocess.run(
                 ["journalctl", "-u", service_name, "--no-pager", "-n", str(lines)],
                 capture_output=True,
                 text=True,
                 timeout=10
             )
-            return result.stdout.strip() if result.returncode == 0 else "No logs available"
+            if result.returncode == 0:
+                return result.stdout.strip()
+            else:
+                # Fallback to systemctl status
+                result = subprocess.run(
+                    ["systemctl", "status", service_name, "--no-pager", "-l"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                return result.stdout.strip() if result.returncode == 0 else "No logs available"
+        except FileNotFoundError:
+            # journalctl not available, try alternative methods
+            try:
+                # Try systemctl status
+                result = subprocess.run(
+                    ["systemctl", "status", service_name, "--no-pager", "-l"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                return result.stdout.strip() if result.returncode == 0 else "No logs available"
+            except Exception as e:
+                return f"Logs not available: {str(e)}"
         except Exception as e:
             return f"Error getting logs: {str(e)}"
     
