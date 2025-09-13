@@ -31,8 +31,7 @@ info() {
 
 # Check if running as root
 if [[ $EUID -eq 0 ]]; then
-   error "This script should not be run as root for security reasons"
-   exit 1
+   warning "This script should not be run as root for security reasons"
 fi
 
 # Configuration variables
