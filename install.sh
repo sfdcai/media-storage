@@ -122,27 +122,7 @@ if ! command -v syncthing &> /dev/null; then
     $SUDO_CMD apt install -y syncthing
 fi
 
-# Install icloudpd
-log "Installing icloudpd..."
-$SUDO_CMD pip3 install icloudpd
-
-# Install additional Python packages
-log "Installing Python dependencies..."
-$SUDO_CMD pip3 install \
-    PyYAML \
-    Pillow \
-    python-dateutil \
-    requests \
-    pyicloud \
-    flask \
-    flask-cors \
-    flask-socketio \
-    python-socketio \
-    eventlet \
-    psutil \
-    colorlog \
-    schedule \
-    python-telegram-bot
+# Note: Python packages will be installed in virtual environment below
 
 # Copy project files
 log "Copying project files..."
@@ -153,7 +133,19 @@ $SUDO_CMD chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR"
 log "Setting up Python virtual environment..."
 $SUDO_CMD -u "$SERVICE_USER" python3.11 -m venv "$PROJECT_DIR/venv"
 $SUDO_CMD -u "$SERVICE_USER" "$PROJECT_DIR/venv/bin/pip" install --upgrade pip
-$SUDO_CMD -u "$SERVICE_USER" "$PROJECT_DIR/venv/bin/pip" install -r "$PROJECT_DIR/requirements.txt"
+
+# Install Python packages in virtual environment
+log "Installing Python packages in virtual environment..."
+
+# Install requirements from requirements.txt if it exists
+if [ -f "$PROJECT_DIR/requirements.txt" ]; then
+    log "Installing requirements from requirements.txt..."
+    $SUDO_CMD -u "$SERVICE_USER" "$PROJECT_DIR/venv/bin/pip" install -r "$PROJECT_DIR/requirements.txt"
+fi
+
+# Install icloudpd (not in requirements.txt)
+log "Installing icloudpd..."
+$SUDO_CMD -u "$SERVICE_USER" "$PROJECT_DIR/venv/bin/pip" install icloudpd
 
 # Create systemd service for Syncthing
 log "Creating Syncthing systemd service..."
