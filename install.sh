@@ -5,6 +5,36 @@
 
 set -e  # Exit on any error
 
+# Enhanced debugging and logging
+DEBUG_MODE=${DEBUG_MODE:-false}
+LOG_FILE="/tmp/install_$(date +%Y%m%d_%H%M%S).log"
+
+# Function to log with timestamp
+log_to_file() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Enhanced error handling
+handle_error() {
+    local exit_code=$?
+    local line_number=$1
+    error "Script failed at line $line_number with exit code $exit_code"
+    error "Check log file: $LOG_FILE"
+    error "Last 10 lines of log:"
+    tail -10 "$LOG_FILE" | while read line; do
+        echo "  $line"
+    done
+    exit $exit_code
+}
+
+# Set up error trap
+trap 'handle_error $LINENO' ERR
+
+# Log script start
+log_to_file "=== Media Pipeline Installation Started ==="
+log_to_file "Debug mode: $DEBUG_MODE"
+log_to_file "Log file: $LOG_FILE"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -12,21 +42,37 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Logging function
+# Enhanced logging functions
 log() {
-    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
+    local message="[$(date +'%Y-%m-%d %H:%M:%S')] $1"
+    echo -e "${GREEN}$message${NC}"
+    log_to_file "LOG: $1"
 }
 
 warn() {
-    echo -e "${YELLOW}[$(date +'%Y-%m-%d %H:%M:%S')] WARNING: $1${NC}"
+    local message="[$(date +'%Y-%m-%d %H:%M:%S')] WARNING: $1"
+    echo -e "${YELLOW}$message${NC}"
+    log_to_file "WARN: $1"
 }
 
 error() {
-    echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}"
+    local message="[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $1"
+    echo -e "${RED}$message${NC}"
+    log_to_file "ERROR: $1"
 }
 
 info() {
-    echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')] INFO: $1${NC}"
+    local message="[$(date +'%Y-%m-%d %H:%M:%S')] INFO: $1"
+    echo -e "${BLUE}$message${NC}"
+    log_to_file "INFO: $1"
+}
+
+debug() {
+    if [ "$DEBUG_MODE" = "true" ]; then
+        local message="[$(date +'%Y-%m-%d %H:%M:%S')] DEBUG: $1"
+        echo -e "${BLUE}$message${NC}"
+        log_to_file "DEBUG: $1"
+    fi
 }
 
 # Check if running as root and adjust sudo usage
@@ -50,6 +96,30 @@ SYNCTHING_PORT="8384"
 
 log "Starting Media Pipeline Installation..."
 
+# Log system information
+info "System Information:"
+info "  OS: $(lsb_release -d | cut -f2)"
+info "  Kernel: $(uname -r)"
+info "  Architecture: $(uname -m)"
+info "  Memory: $(free -h | grep '^Mem:' | awk '{print $2}')"
+info "  Disk: $(df -h / | tail -1 | awk '{print $4 " available"}')"
+info "  User: $(whoami)"
+info "  Working Directory: $(pwd)"
+
+# Enhanced LXC/Container detection
+info "Container Detection:"
+if [ -f /.dockerenv ]; then
+    info "  Environment: Docker container detected"
+elif [ -f /run/.containerenv ]; then
+    info "  Environment: Podman container detected"
+elif grep -q "container=lxc" /proc/1/environ 2>/dev/null; then
+    info "  Environment: LXC container detected"
+elif [ -d /proc/vz ] && [ ! -d /proc/bc ]; then
+    info "  Environment: OpenVZ container detected"
+else
+    info "  Environment: Regular system (not containerized)"
+fi
+
 # Check prerequisites
 log "Checking prerequisites..."
 if ! command -v systemctl &> /dev/null; then
@@ -66,11 +136,22 @@ log "Prerequisites check passed."
 
 # Update system packages
 log "Updating system packages..."
-$SUDO_CMD apt update && $SUDO_CMD apt upgrade -y
+debug "Running: $SUDO_CMD apt update"
+if ! $SUDO_CMD apt update; then
+    error "Failed to update package lists"
+    exit 1
+fi
+
+debug "Running: $SUDO_CMD apt upgrade -y"
+if ! $SUDO_CMD apt upgrade -y; then
+    warn "Package upgrade failed, continuing with installation..."
+fi
 
 # Install essential packages
 log "Installing essential packages..."
-$SUDO_CMD apt install -y \
+debug "Installing packages: curl wget git unzip software-properties-common apt-transport-https ca-certificates gnupg lsb-release build-essential python3-dev python3-pip python3-venv python3-setuptools ffmpeg sqlite3 nginx supervisor systemd cron rsync htop nano vim"
+
+if ! $SUDO_CMD apt install -y \
     curl \
     wget \
     git \
@@ -94,7 +175,12 @@ $SUDO_CMD apt install -y \
     rsync \
     htop \
     nano \
-    vim
+    vim; then
+    error "Failed to install essential packages"
+    exit 1
+fi
+
+log "Essential packages installed successfully"
 
 # Install Python 3.11 if not available
 log "Setting up Python $PYTHON_VERSION..."
