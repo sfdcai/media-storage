@@ -21,6 +21,33 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Function to check if a service is running
+service_running() {
+    systemctl is-active --quiet "$1" 2>/dev/null || pgrep -f "$1" >/dev/null 2>&1
+}
+
+# Function to check if a port is listening
+port_listening() {
+    netstat -tlnp 2>/dev/null | grep -q ":$1 " || ss -tlnp 2>/dev/null | grep -q ":$1 "
+}
+
+# Function to check if a file exists and is not empty
+file_exists() {
+    [ -f "$1" ] && [ -s "$1" ]
+}
+
+# Function to check if a directory exists
+dir_exists() {
+    [ -d "$1" ]
+}
+
+echo -e "${GREEN}Checking existing installation...${NC}"
+
 # Configuration
 PROJECT_DIR="/opt/media-pipeline"
 SERVICE_USER="media-pipeline"
@@ -31,138 +58,246 @@ echo ""
 
 echo -e "${BLUE}=== Step 1: Install System Packages ===${NC}"
 
-# Install system packages
-echo -e "${GREEN}Installing system packages...${NC}"
-apt update
-apt install -y nginx python3-pip python3-venv net-tools curl wget sqlite3
+# Check what's already installed
+PACKAGES_TO_INSTALL=()
+if ! command_exists nginx; then
+    PACKAGES_TO_INSTALL+=("nginx")
+fi
+if ! command_exists python3; then
+    PACKAGES_TO_INSTALL+=("python3")
+fi
+if ! command_exists pip3; then
+    PACKAGES_TO_INSTALL+=("python3-pip")
+fi
+if ! command_exists python3-venv; then
+    PACKAGES_TO_INSTALL+=("python3-venv")
+fi
+if ! command_exists netstat; then
+    PACKAGES_TO_INSTALL+=("net-tools")
+fi
+if ! command_exists curl; then
+    PACKAGES_TO_INSTALL+=("curl")
+fi
+if ! command_exists wget; then
+    PACKAGES_TO_INSTALL+=("wget")
+fi
+if ! command_exists sqlite3; then
+    PACKAGES_TO_INSTALL+=("sqlite3")
+fi
 
+if [ ${#PACKAGES_TO_INSTALL[@]} -eq 0 ]; then
+    echo -e "${GREEN}✓ All system packages already installed${NC}"
+else
+    echo -e "${GREEN}Installing missing packages: ${PACKAGES_TO_INSTALL[*]}${NC}"
+apt update
+    apt install -y "${PACKAGES_TO_INSTALL[@]}"
 echo -e "${GREEN}✓ System packages installed${NC}"
+fi
 
 echo ""
 echo -e "${BLUE}=== Step 2: Install Node.js and PM2 ===${NC}"
 
-# Install Node.js
-echo -e "${GREEN}Installing Node.js...${NC}"
-# Try NodeSource first, fallback to Ubuntu package if it fails
-if curl -fsSL https://deb.nodesource.com/setup_18.x | bash -; then
-    echo -e "${GREEN}NodeSource repository added successfully${NC}"
-apt install -y nodejs
+# Check if Node.js is already installed
+if command_exists node && command_exists npm; then
+    echo -e "${GREEN}✓ Node.js already installed: $(node --version)${NC}"
+    echo -e "${GREEN}✓ NPM already installed: $(npm --version)${NC}"
+    
+    # Check if PM2 is installed
+    if command_exists pm2; then
+        echo -e "${GREEN}✓ PM2 already installed: $(pm2 --version)${NC}"
+    else
+        echo -e "${GREEN}Installing PM2...${NC}"
+        npm install -g pm2
+        echo -e "${GREEN}✓ PM2 installed${NC}"
+    fi
 else
-    echo -e "${YELLOW}NodeSource repository failed, using Ubuntu default Node.js${NC}"
-    apt install -y nodejs npm
-fi
+echo -e "${GREEN}Installing Node.js...${NC}"
+    # Try NodeSource first, fallback to Ubuntu package if it fails
+    if curl -fsSL https://deb.nodesource.com/setup_18.x | bash -; then
+        echo -e "${GREEN}NodeSource repository added successfully${NC}"
+apt install -y nodejs
+    else
+        echo -e "${YELLOW}NodeSource repository failed, using Ubuntu default Node.js${NC}"
+        apt install -y nodejs npm
+    fi
 
 # Install PM2 globally
 echo -e "${GREEN}Installing PM2...${NC}"
-# Ensure Node.js is available (in case NVM was used)
-if ! command -v node &> /dev/null; then
-    echo -e "${YELLOW}Node.js not found in PATH, trying to source NVM...${NC}"
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-fi
+    # Ensure Node.js is available (in case NVM was used)
+    if ! command -v node &> /dev/null; then
+        echo -e "${YELLOW}Node.js not found in PATH, trying to source NVM...${NC}"
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+    fi
 
-# Verify Node.js is available
-if command -v node &> /dev/null; then
-    echo -e "${GREEN}Node.js version: $(node --version)${NC}"
-    echo -e "${GREEN}NPM version: $(npm --version)${NC}"
+    # Verify Node.js is available
+    if command -v node &> /dev/null; then
+        echo -e "${GREEN}Node.js version: $(node --version)${NC}"
+        echo -e "${GREEN}NPM version: $(npm --version)${NC}"
 npm install -g pm2
-else
-    echo -e "${RED}Node.js not found. Please install Node.js first.${NC}"
-    exit 1
-fi
-
+    else
+        echo -e "${RED}Node.js not found. Please install Node.js first.${NC}"
+        exit 1
+    fi
 echo -e "${GREEN}✓ Node.js and PM2 installed${NC}"
+fi
 
 echo ""
 echo -e "${BLUE}=== Step 3: Install Syncthing ===${NC}"
 
-# Install Syncthing
-echo -e "${GREEN}Installing Syncthing...${NC}"
-# Use modern GPG key management instead of deprecated apt-key
-curl -s https://syncthing.net/release-key.txt | gpg --dearmor -o /usr/share/keyrings/syncthing-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/syncthing-archive-keyring.gpg] https://apt.syncthing.net/ syncthing stable" > /etc/apt/sources.list.d/syncthing.list
-apt update
-apt install -y syncthing
-
-echo -e "${GREEN}✓ Syncthing installed${NC}"
+# Check if Syncthing is already installed
+if command_exists syncthing; then
+    echo -e "${GREEN}✓ Syncthing already installed: $(syncthing --version | head -n1)${NC}"
+else
+    echo -e "${GREEN}Installing Syncthing...${NC}"
+    # Use modern GPG key management instead of deprecated apt-key
+    curl -s https://syncthing.net/release-key.txt | gpg --dearmor -o /usr/share/keyrings/syncthing-archive-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/syncthing-archive-keyring.gpg] https://apt.syncthing.net/ syncthing stable" > /etc/apt/sources.list.d/syncthing.list
+    apt update
+    apt install -y syncthing
+    echo -e "${GREEN}✓ Syncthing installed${NC}"
+fi
 
 echo ""
 echo -e "${BLUE}=== Step 4: Setup Python Virtual Environment ===${NC}"
 
-# Create virtual environment
-echo -e "${GREEN}Creating Python virtual environment...${NC}"
-python3 -m venv "$PROJECT_DIR/venv"
+# Check if virtual environment already exists
+if dir_exists "$PROJECT_DIR/venv"; then
+    echo -e "${GREEN}✓ Python virtual environment already exists${NC}"
+    
+    # Check if required packages are installed
+    if "$PROJECT_DIR/venv/bin/pip" show flask flask-socketio requests icloudpd >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ All Python packages already installed${NC}"
+    else
+        echo -e "${GREEN}Installing missing Python packages...${NC}"
+        "$PROJECT_DIR/venv/bin/pip" install flask flask-socketio requests icloudpd
+        echo -e "${GREEN}✓ Python packages installed${NC}"
+    fi
+else
+    echo -e "${GREEN}Creating Python virtual environment...${NC}"
+    python3 -m venv "$PROJECT_DIR/venv"
 
-# Install Python packages
-echo -e "${GREEN}Installing Python packages...${NC}"
-"$PROJECT_DIR/venv/bin/pip" install flask flask-socketio requests icloudpd
-
-echo -e "${GREEN}✓ Python virtual environment created${NC}"
+    # Install Python packages
+    echo -e "${GREEN}Installing Python packages...${NC}"
+    "$PROJECT_DIR/venv/bin/pip" install flask flask-socketio requests icloudpd
+    echo -e "${GREEN}✓ Python virtual environment created${NC}"
+fi
 
 echo ""
 echo -e "${BLUE}=== Step 5: Create Required Directories ===${NC}"
 
 # Create required directories
-echo -e "${GREEN}Creating required directories...${NC}"
-mkdir -p /var/log/media-pipeline
-mkdir -p /mnt/wd_all_pictures/incoming
-mkdir -p /mnt/wd_all_pictures/processed
-mkdir -p "$PROJECT_DIR/templates"
+DIRS_TO_CREATE=()
+if ! dir_exists "/var/log/media-pipeline"; then
+    DIRS_TO_CREATE+=("/var/log/media-pipeline")
+fi
+if ! dir_exists "/mnt/wd_all_pictures/incoming"; then
+    DIRS_TO_CREATE+=("/mnt/wd_all_pictures/incoming")
+fi
+if ! dir_exists "/mnt/wd_all_pictures/processed"; then
+    DIRS_TO_CREATE+=("/mnt/wd_all_pictures/processed")
+fi
+if ! dir_exists "$PROJECT_DIR/templates"; then
+    DIRS_TO_CREATE+=("$PROJECT_DIR/templates")
+fi
 
-# Set ownership
-chown -R "$SERVICE_USER:$SERVICE_USER" /var/log/media-pipeline
-chown -R "$SERVICE_USER:$SERVICE_USER" /mnt/wd_all_pictures
-chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR"
+if [ ${#DIRS_TO_CREATE[@]} -eq 0 ]; then
+    echo -e "${GREEN}✓ All required directories already exist${NC}"
+else
+    echo -e "${GREEN}Creating missing directories: ${DIRS_TO_CREATE[*]}${NC}"
+    for dir in "${DIRS_TO_CREATE[@]}"; do
+        mkdir -p "$dir"
+    done
+    echo -e "${GREEN}✓ Required directories created${NC}"
+fi
 
-echo -e "${GREEN}✓ Required directories created${NC}"
+# Set ownership (always do this to ensure correct permissions)
+echo -e "${GREEN}Setting directory ownership...${NC}"
+chown -R "$SERVICE_USER:$SERVICE_USER" /var/log/media-pipeline 2>/dev/null || true
+chown -R "$SERVICE_USER:$SERVICE_USER" /mnt/wd_all_pictures 2>/dev/null || true
+chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR" 2>/dev/null || true
 
 echo ""
 echo -e "${BLUE}=== Step 6: Copy Application Files ===${NC}"
 
 # Copy application files to project directory
-echo -e "${GREEN}Copying application files...${NC}"
+FILES_COPIED=0
 
 # Copy database viewer
 if [ -f "db_viewer.py" ]; then
-    cp db_viewer.py "$PROJECT_DIR/"
-chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/db_viewer.py"
-chmod +x "$PROJECT_DIR/db_viewer.py"
-    echo -e "${GREEN}✓ Database viewer copied${NC}"
+    if [ ! -f "$PROJECT_DIR/db_viewer.py" ] || [ "db_viewer.py" -nt "$PROJECT_DIR/db_viewer.py" ]; then
+        cp db_viewer.py "$PROJECT_DIR/"
+        chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/db_viewer.py"
+        chmod +x "$PROJECT_DIR/db_viewer.py"
+        echo -e "${GREEN}✓ Database viewer copied${NC}"
+        FILES_COPIED=1
+    else
+        echo -e "${GREEN}✓ Database viewer already up to date${NC}"
+    fi
 else
     echo -e "${YELLOW}⚠ db_viewer.py not found, skipping${NC}"
 fi
 
 # Copy PM2 ecosystem config
 if [ -f "ecosystem.config.js" ]; then
-    cp ecosystem.config.js "$PROJECT_DIR/"
-chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/ecosystem.config.js"
-    echo -e "${GREEN}✓ PM2 ecosystem config copied${NC}"
+    if [ ! -f "$PROJECT_DIR/ecosystem.config.js" ] || [ "ecosystem.config.js" -nt "$PROJECT_DIR/ecosystem.config.js" ]; then
+        cp ecosystem.config.js "$PROJECT_DIR/"
+        chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/ecosystem.config.js"
+        echo -e "${GREEN}✓ PM2 ecosystem config copied${NC}"
+        FILES_COPIED=1
+    else
+        echo -e "${GREEN}✓ PM2 ecosystem config already up to date${NC}"
+    fi
 else
     echo -e "${YELLOW}⚠ ecosystem.config.js not found, skipping${NC}"
 fi
 
 # Copy templates
 if [ -d "templates" ]; then
-    cp -r templates/* "$PROJECT_DIR/templates/"
-    chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/templates/"
-    echo -e "${GREEN}✓ Templates copied${NC}"
+    # Check if templates need updating
+    TEMPLATES_UPDATED=0
+    for template in templates/*; do
+        if [ -f "$template" ]; then
+            template_name=$(basename "$template")
+            if [ ! -f "$PROJECT_DIR/templates/$template_name" ] || [ "$template" -nt "$PROJECT_DIR/templates/$template_name" ]; then
+                TEMPLATES_UPDATED=1
+                break
+            fi
+        fi
+    done
+    
+    if [ $TEMPLATES_UPDATED -eq 1 ]; then
+        cp -r templates/* "$PROJECT_DIR/templates/"
+        chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/templates/"
+        echo -e "${GREEN}✓ Templates copied${NC}"
+        FILES_COPIED=1
+    else
+        echo -e "${GREEN}✓ Templates already up to date${NC}"
+    fi
 else
     echo -e "${YELLOW}⚠ templates directory not found, skipping${NC}"
 fi
 
-echo -e "${GREEN}✓ Application files copied${NC}"
+if [ $FILES_COPIED -eq 0 ]; then
+    echo -e "${GREEN}✓ All application files already up to date${NC}"
+fi
 
-# Configure Nginx
-echo -e "${GREEN}Configuring Nginx...${NC}"
+echo -e "${BLUE}=== Step 7: Configure Nginx ===${NC}"
 
-# Copy nginx configuration
+# Check if nginx configuration needs updating
+NGINX_CONFIG_UPDATED=0
 if [ -f "nginx-media-pipeline.conf" ]; then
-    cp nginx-media-pipeline.conf /etc/nginx/sites-available/media-pipeline
-    echo -e "${GREEN}✓ Nginx configuration copied${NC}"
+    if [ ! -f "/etc/nginx/sites-available/media-pipeline" ] || [ "nginx-media-pipeline.conf" -nt "/etc/nginx/sites-available/media-pipeline" ]; then
+        cp nginx-media-pipeline.conf /etc/nginx/sites-available/media-pipeline
+        echo -e "${GREEN}✓ Nginx configuration copied${NC}"
+        NGINX_CONFIG_UPDATED=1
+    else
+        echo -e "${GREEN}✓ Nginx configuration already up to date${NC}"
+    fi
 else
     echo -e "${YELLOW}⚠ nginx-media-pipeline.conf not found, creating basic config${NC}"
-cat > /etc/nginx/sites-available/media-pipeline << EOF
+    cat > /etc/nginx/sites-available/media-pipeline << EOF
 server {
     listen 80;
     server_name _;
@@ -186,24 +321,41 @@ server {
     }
 }
 EOF
+    NGINX_CONFIG_UPDATED=1
 fi
 
-# Enable the site
+# Enable the site (always do this to ensure it's enabled)
 ln -sf /etc/nginx/sites-available/media-pipeline /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
 
-# Test and start Nginx
-nginx -t
-service nginx start
-
-echo -e "${GREEN}✓ Nginx configured and started${NC}"
+# Test and restart nginx if config was updated
+if [ $NGINX_CONFIG_UPDATED -eq 1 ]; then
+    echo -e "${GREEN}Testing nginx configuration...${NC}"
+    if nginx -t; then
+        echo -e "${GREEN}✓ Nginx configuration test passed${NC}"
+        if service nginx is-active --quiet; then
+            echo -e "${GREEN}Reloading nginx...${NC}"
+            service nginx reload
+        else
+            echo -e "${GREEN}Starting nginx...${NC}"
+            service nginx start
+        fi
+        echo -e "${GREEN}✓ Nginx configured and running${NC}"
+    else
+        echo -e "${RED}✗ Nginx configuration test failed${NC}"
+        exit 1
+    fi
+else
+    echo -e "${GREEN}✓ Nginx already configured and running${NC}"
+fi
 
 echo ""
-echo -e "${BLUE}=== Step 9: Create Environment File ===${NC}"
+echo -e "${BLUE}=== Step 8: Create Environment File ===${NC}"
 
-# Create .env file
-echo -e "${GREEN}Creating environment file...${NC}"
-cat > "$PROJECT_DIR/.env" << EOF
+# Create .env file only if it doesn't exist
+if [ ! -f "$PROJECT_DIR/.env" ]; then
+    echo -e "${GREEN}Creating environment file...${NC}"
+    cat > "$PROJECT_DIR/.env" << EOF
 # Media Pipeline Environment Configuration
 # Generated on $(date)
 
@@ -224,25 +376,38 @@ INCOMING_DIR=/mnt/wd_all_pictures/incoming
 PROCESSED_DIR=/mnt/wd_all_pictures/processed
 EOF
 
-chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/.env"
-chmod 600 "$PROJECT_DIR/.env"
-
-echo -e "${GREEN}✓ Environment file created${NC}"
-
-echo ""
-echo -e "${BLUE}=== Step 10: Start PM2 Applications ===${NC}"
-
-# Start PM2 applications
-echo -e "${GREEN}Starting PM2 applications...${NC}"
-pm2 start "$PROJECT_DIR/ecosystem.config.js"
-
-# Save PM2 configuration
-pm2 save
-
-echo -e "${GREEN}✓ PM2 applications started${NC}"
+    chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/.env"
+    chmod 600 "$PROJECT_DIR/.env"
+    echo -e "${GREEN}✓ Environment file created${NC}"
+else
+    echo -e "${GREEN}✓ Environment file already exists${NC}"
+fi
 
 echo ""
-echo -e "${BLUE}=== Step 11: Verify Dependencies ===${NC}"
+echo -e "${BLUE}=== Step 9: Start PM2 Applications ===${NC}"
+
+# Check if PM2 is already running applications
+if pm2 list | grep -q "online"; then
+    echo -e "${GREEN}✓ PM2 applications already running${NC}"
+    
+    # Check if ecosystem config was updated and restart if needed
+    if [ $FILES_COPIED -eq 1 ]; then
+        echo -e "${GREEN}Restarting PM2 applications due to config changes...${NC}"
+        pm2 restart all
+        pm2 save
+        echo -e "${GREEN}✓ PM2 applications restarted${NC}"
+    else
+        echo -e "${GREEN}✓ PM2 applications up to date${NC}"
+    fi
+else
+    echo -e "${GREEN}Starting PM2 applications...${NC}"
+    pm2 start "$PROJECT_DIR/ecosystem.config.js"
+    pm2 save
+    echo -e "${GREEN}✓ PM2 applications started${NC}"
+fi
+
+echo ""
+echo -e "${BLUE}=== Step 10: Verify Dependencies ===${NC}"
 
 # Verify all critical dependencies
 echo -e "${GREEN}Verifying dependencies...${NC}"
@@ -303,7 +468,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}=== Step 12: Verify Services ===${NC}"
+echo -e "${BLUE}=== Step 11: Verify Services ===${NC}"
 
 # Wait for services to start
 sleep 5
@@ -356,3 +521,12 @@ echo -e "${YELLOW}Restart all:${NC} pm2 restart all"
 echo ""
 echo -e "${GREEN}🎉 Complete Media Pipeline System Installed! 🎉${NC}"
 echo -e "${GREEN}Use the Database Viewer to explore your downloaded media data!${NC}"
+
+echo ""
+echo -e "${BLUE}=== Installation Summary ===${NC}"
+echo -e "${GREEN}✓ Optimized installation completed successfully${NC}"
+echo -e "${GREEN}✓ Only missing components were installed/updated${NC}"
+echo -e "${GREEN}✓ Existing configurations preserved${NC}"
+echo -e "${GREEN}✓ Services restarted only when necessary${NC}"
+echo ""
+echo -e "${YELLOW}💡 Tip: Run this script again anytime to update only what's needed!${NC}"
