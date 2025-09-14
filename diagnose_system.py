@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
-Comprehensive System Diagnostic Script
-Checks all components of the media pipeline system
+System Diagnostic Script
+Comprehensive system health check for the media pipeline
 """
 
-import os
-import sys
 import subprocess
-import importlib
+import sys
+import os
 import socket
 from pathlib import Path
+
+# Add current directory to path
+sys.path.insert(0, "/opt/media-pipeline")
 
 def check_python_imports():
     """Check if all required Python modules can be imported"""
@@ -17,9 +19,9 @@ def check_python_imports():
     
     # Check Python modules using system Python
     print("  Checking Python modules...")
-        try:
-            result = subprocess.run([
-                'python3', '-c', '''
+    try:
+        result = subprocess.run([
+            'python3', '-c', '''
 import sys
 required_modules = [
     "flask", "flask_socketio", "flask_cors", "psutil", "yaml", 
@@ -39,55 +41,39 @@ if missing:
 else:
     sys.exit(0)
 '''
-            ], capture_output=True, text=True, cwd='/opt/media-pipeline')
-            
-            missing_modules = []
-            for line in result.stdout.strip().split('\n'):
-                if line.startswith('OK:'):
-                    module = line.split(':', 1)[1]
-                    print(f"  ✅ {module}")
-                elif line.startswith('FAIL:'):
-                    parts = line.split(':', 2)
-                    module = parts[1]
-                    error = parts[2] if len(parts) > 2 else "Import failed"
-                    print(f"  ❌ {module}: {error}")
-                    missing_modules.append(module)
-            
-            return missing_modules
-            
-        except Exception as e:
-            print(f"  ❌ Error checking virtual environment imports: {e}")
-            return ['virtual_env_check_failed']
-    else:
-        print("  ⚠️ Virtual environment not found, checking system Python...")
-        required_modules = [
-            'flask', 'flask_socketio', 'flask_cors', 'psutil', 'yaml',
-            'requests', 'PIL', 'sqlite3', 'datetime', 'pathlib',
-            'threading', 'json', 'time'
-        ]
+        ], capture_output=True, text=True, cwd='/opt/media-pipeline')
         
         missing_modules = []
-        for module in required_modules:
-            try:
-                importlib.import_module(module)
+        for line in result.stdout.strip().split('\n'):
+            if line.startswith('OK:'):
+                module = line.split(':', 1)[1]
                 print(f"  ✅ {module}")
-            except ImportError as e:
-                print(f"  ❌ {module}: {e}")
+            elif line.startswith('FAIL:'):
+                parts = line.split(':', 2)
+                module = parts[1]
+                error = parts[2] if len(parts) > 2 else "Import failed"
+                print(f"  ❌ {module}: {error}")
                 missing_modules.append(module)
         
-        return missing_modules
+        if result.returncode == 0:
+            print("  ✅ All required Python modules available")
+            return True
+        else:
+            print(f"  ❌ Missing Python modules: {missing_modules}")
+            return False
+            
+    except Exception as e:
+        print(f"  ❌ Error checking Python modules: {e}")
+        return False
 
 def check_local_imports():
     """Check if local modules can be imported"""
     print("\n🔍 Checking local module imports...")
     
-    # Check if we're in the virtual environment
-    system_python = 'python3'
-    if False:  # Disabled virtual environment check
-        print("  Using virtual environment Python for local import checks...")
-        try:
-            result = subprocess.run([
-                'python3', '-c', '''
+    # Check local modules using system Python
+    try:
+        result = subprocess.run([
+            'python3', '-c', '''
 import sys
 import os
 sys.path.insert(0, "/opt/media-pipeline")
@@ -113,91 +99,66 @@ if missing:
 else:
     sys.exit(0)
 '''
-            ], capture_output=True, text=True, cwd='/opt/media-pipeline')
-            
-            missing_local = []
-            for line in result.stdout.strip().split('\n'):
-                if line.startswith('OK:'):
-                    module = line.split(':', 1)[1]
-                    print(f"  ✅ {module}")
-                elif line.startswith('FAIL:'):
-                    parts = line.split(':', 2)
-                    module = parts[1]
-                    error = parts[2] if len(parts) > 2 else "Import failed"
-                    print(f"  ❌ {module}: {error}")
-                    missing_local.append(module)
-            
-            return missing_local
-            
-        except Exception as e:
-            print(f"  ❌ Error checking virtual environment local imports: {e}")
-            return ['local_import_check_failed']
-    else:
-        print("  ⚠️ Virtual environment not found, checking system Python...")
-        # Add current directory to path
-        current_dir = Path(__file__).parent
-        sys.path.insert(0, str(current_dir))
+        ], capture_output=True, text=True, cwd='/opt/media-pipeline')
         
-        local_modules = [
-            'common.config',
-            'common.database', 
-            'common.logger',
-            'common.auth',
-            'telegram_notifier'
-        ]
-        
-        missing_local = []
-        for module in local_modules:
-            try:
-                importlib.import_module(module)
+        missing_modules = []
+        for line in result.stdout.strip().split('\n'):
+            if line.startswith('OK:'):
+                module = line.split(':', 1)[1]
                 print(f"  ✅ {module}")
-            except ImportError as e:
-                print(f"  ❌ {module}: {e}")
-                missing_local.append(module)
+            elif line.startswith('FAIL:'):
+                parts = line.split(':', 2)
+                module = parts[1]
+                error = parts[2] if len(parts) > 2 else "Import failed"
+                print(f"  ❌ {module}: {error}")
+                missing_modules.append(module)
         
-        return missing_local
+        if result.returncode == 0:
+            print("  ✅ All local modules available")
+            return True
+        else:
+            print(f"  ❌ Missing local modules: {missing_modules}")
+            return False
+            
+    except Exception as e:
+        print(f"  ❌ Error checking local modules: {e}")
+        return False
 
 def check_file_permissions():
-    """Check if Python scripts are executable"""
+    """Check file permissions for key scripts"""
     print("\n🔍 Checking file permissions...")
     
-    scripts = [
-        'web_ui.py',
-        'web_status_dashboard.py',
-        'web_config_interface.py', 
-        'db_viewer.py',
-        'sync_icloud.py',
-        'bulk_icloud_sync.py',
+    key_files = [
+        'web_ui.py', 'web_status_dashboard.py', 'web_config_interface.py',
+        'db_viewer.py', 'sync_icloud.py', 'bulk_icloud_sync.py',
         'pipeline_orchestrator.py'
     ]
     
-    missing_files = []
-    for script in scripts:
-        script_path = Path(script)
-        if script_path.exists():
-            if os.access(script_path, os.X_OK):
-                print(f"  ✅ {script} (executable)")
+    all_good = True
+    for file in key_files:
+        if os.path.exists(file):
+            if os.access(file, os.X_OK):
+                print(f"  ✅ {file} (executable)")
             else:
-                print(f"  ⚠️ {script} (not executable)")
-                os.chmod(script_path, 0o755)
-                print(f"    → Made executable")
+                print(f"  ❌ {file} (not executable)")
+                all_good = False
         else:
-            print(f"  ❌ {script} (missing)")
-            missing_files.append(script)
+            print(f"  ❌ {file} (not found)")
+            all_good = False
     
-    return missing_files
+    return all_good
 
-def check_ports():
-    """Check which ports are listening"""
+def check_port_status():
+    """Check if required ports are listening"""
     print("\n🔍 Checking port status...")
     
     ports_to_check = [80, 8080, 8081, 8082, 8083, 8084, 8385, 9615]
-    
     listening_ports = []
+    
     for port in ports_to_check:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(1)
+                s.settimeout(2)
                 result = s.connect_ex(('127.0.0.1', port))
                 if result == 0:
                     print(f"  ✅ Port {port}: LISTENING")
@@ -218,36 +179,20 @@ def check_pm2_status():
         if result.returncode == 0:
             print("PM2 Status:")
             print(result.stdout)
-            
-            # Parse PM2 output to find failed apps
-            lines = result.stdout.split('\n')
-            failed_apps = []
-            for line in lines:
-                if 'errored' in line or 'stopped' in line:
-                    parts = line.split()
-                    if len(parts) > 1:
-                        app_name = parts[1]
-                        status = parts[4] if len(parts) > 4 else 'unknown'
-                        failed_apps.append((app_name, status))
-                        print(f"  ❌ {app_name}: {status}")
-            
-            return failed_apps
+            return True
         else:
-            print(f"  ❌ PM2 command failed: {result.stderr}")
-            return []
-    except FileNotFoundError:
-        print("  ❌ PM2 not found")
-        return []
+            print(f"  ❌ PM2 status check failed: {result.stderr}")
+            return False
     except Exception as e:
-        print(f"  ❌ PM2 check failed: {e}")
-        return []
+        print(f"  ❌ PM2 check error: {e}")
+        return False
 
 def check_nginx_config():
-    """Check nginx configuration"""
+    """Check Nginx configuration"""
     print("\n🔍 Checking nginx configuration...")
     
     try:
-        # Check if nginx config is valid
+        # Test nginx configuration
         result = subprocess.run(['nginx', '-t'], capture_output=True, text=True)
         if result.returncode == 0:
             print("  ✅ Nginx configuration is valid")
@@ -255,26 +200,24 @@ def check_nginx_config():
             print(f"  ❌ Nginx configuration error: {result.stderr}")
             return False
         
-        # Check if our site is enabled
-        sites_enabled = Path('/etc/nginx/sites-enabled/media-pipeline')
-        if sites_enabled.exists():
+        # Check if media-pipeline site is enabled
+        if os.path.exists('/etc/nginx/sites-enabled/media-pipeline'):
             print("  ✅ Media pipeline site is enabled")
         else:
-            print("  ❌ Media pipeline site is not enabled")
+            print("  ❌ Media pipeline site not enabled")
             return False
         
         return True
     except Exception as e:
-        print(f"  ❌ Nginx check failed: {e}")
+        print(f"  ❌ Nginx check error: {e}")
         return False
 
 def check_directories():
-    """Check if required directories exist"""
+    """Check required directories"""
     print("\n🔍 Checking directories...")
     
     required_dirs = [
         '/opt/media-pipeline',
-        '/opt/media-pipeline/venv',
         '/opt/media-pipeline/templates',
         '/opt/media-pipeline/common',
         '/var/log/media-pipeline',
@@ -282,52 +225,57 @@ def check_directories():
         '/mnt/wd_all_pictures/processed'
     ]
     
-    missing_dirs = []
-    for dir_path in required_dirs:
-        if Path(dir_path).exists():
-            print(f"  ✅ {dir_path}")
+    all_good = True
+    for directory in required_dirs:
+        if os.path.exists(directory):
+            print(f"  ✅ {directory}")
         else:
-            print(f"  ❌ {dir_path} (missing)")
-            missing_dirs.append(dir_path)
+            print(f"  ❌ {directory}")
+            all_good = False
     
-    return missing_dirs
+    return all_good
 
 def check_database():
-    """Check if database exists and is accessible"""
+    """Check database accessibility"""
     print("\n🔍 Checking database...")
     
     db_path = '/opt/media-pipeline/media.db'
-    if Path(db_path).exists():
+    if os.path.exists(db_path):
         print(f"  ✅ Database exists: {db_path}")
+        
         try:
             import sqlite3
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
             tables = cursor.fetchall()
-            print(f"  ✅ Database accessible, {len(tables)} tables found")
             conn.close()
+            
+            print(f"  ✅ Database accessible, {len(tables)} tables found")
             return True
         except Exception as e:
             print(f"  ❌ Database error: {e}")
             return False
     else:
-        print(f"  ❌ Database missing: {db_path}")
+        print(f"  ❌ Database not found: {db_path}")
         return False
 
 def main():
-    """Run comprehensive system diagnostic"""
+    """Main diagnostic function"""
     print("🚀 Media Pipeline System Diagnostic")
     print("=" * 50)
     
+    # Change to project directory
+    os.chdir('/opt/media-pipeline')
+    
     # Run all checks
-    missing_modules = check_python_imports()
-    missing_local = check_local_imports()
-    missing_files = check_file_permissions()
-    listening_ports = check_ports()
-    failed_apps = check_pm2_status()
+    python_ok = check_python_imports()
+    local_ok = check_local_imports()
+    files_ok = check_file_permissions()
+    ports = check_port_status()
+    pm2_ok = check_pm2_status()
     nginx_ok = check_nginx_config()
-    missing_dirs = check_directories()
+    dirs_ok = check_directories()
     db_ok = check_database()
     
     # Summary
@@ -335,63 +283,45 @@ def main():
     print("📊 DIAGNOSTIC SUMMARY")
     print("=" * 50)
     
-    if missing_modules:
-        print(f"❌ Missing Python modules: {', '.join(missing_modules)}")
-    else:
-        print("✅ All Python modules available")
-    
-    if missing_local:
-        print(f"❌ Missing local modules: {', '.join(missing_local)}")
-    else:
-        print("✅ All local modules available")
-    
-    if missing_files:
-        print(f"❌ Missing files: {', '.join(missing_files)}")
-    else:
-        print("✅ All required files present")
-    
-    if missing_dirs:
-        print(f"❌ Missing directories: {', '.join(missing_dirs)}")
-    else:
-        print("✅ All required directories present")
-    
-    if not db_ok:
-        print("❌ Database issues detected")
-    else:
-        print("✅ Database is working")
-    
-    if not nginx_ok:
-        print("❌ Nginx configuration issues")
-    else:
-        print("✅ Nginx configuration is valid")
-    
-    expected_ports = [80, 8080, 8081, 8082, 8083, 8084, 8385, 9615]
-    missing_ports = [p for p in expected_ports if p not in listening_ports]
-    if missing_ports:
-        print(f"❌ Missing ports: {missing_ports}")
-    else:
-        print("✅ All expected ports are listening")
-    
-    if failed_apps:
-        print(f"❌ Failed PM2 apps: {[app[0] for app in failed_apps]}")
-    else:
-        print("✅ All PM2 applications are running")
+    print(f"✅ Python modules: {'OK' if python_ok else 'FAIL'}")
+    print(f"✅ Local modules: {'OK' if local_ok else 'FAIL'}")
+    print(f"✅ File permissions: {'OK' if files_ok else 'FAIL'}")
+    print(f"✅ Ports listening: {len(ports)}/8")
+    print(f"✅ PM2 status: {'OK' if pm2_ok else 'FAIL'}")
+    print(f"✅ Nginx config: {'OK' if nginx_ok else 'FAIL'}")
+    print(f"✅ Directories: {'OK' if dirs_ok else 'FAIL'}")
+    print(f"✅ Database: {'OK' if db_ok else 'FAIL'}")
     
     # Recommendations
     print("\n🔧 RECOMMENDATIONS:")
-    if missing_modules or missing_local:
+    if not python_ok:
         print("1. Install missing Python dependencies")
-    if missing_files:
-        print("2. Ensure all Python scripts are present and executable")
-    if missing_dirs:
-        print("3. Create missing directories")
-    if failed_apps:
-        print("4. Restart failed PM2 applications")
-    if missing_ports:
-        print("5. Start services on missing ports")
+    if not local_ok:
+        print("2. Check local module imports")
+    if not files_ok:
+        print("3. Fix file permissions")
+    if len(ports) < 8:
+        print("4. Start services on missing ports")
+    if not pm2_ok:
+        print("5. Check PM2 configuration")
+    if not nginx_ok:
+        print("6. Fix Nginx configuration")
+    if not dirs_ok:
+        print("7. Create missing directories")
+    if not db_ok:
+        print("8. Initialize database")
     
-    return len(missing_modules) + len(missing_local) + len(missing_files) + len(missing_dirs) + len(failed_apps) + len(missing_ports)
+    # Overall status
+    all_checks = [python_ok, local_ok, files_ok, pm2_ok, nginx_ok, dirs_ok, db_ok]
+    passed_checks = sum(all_checks)
+    total_checks = len(all_checks)
+    
+    if passed_checks == total_checks and len(ports) >= 6:
+        print(f"\n🎉 System is healthy! ({passed_checks}/{total_checks} checks passed)")
+        return 0
+    else:
+        print(f"\n⚠️ System has issues ({passed_checks}/{total_checks} checks passed)")
+        return 1
 
 if __name__ == "__main__":
-    exit_code = main()
-    sys.exit(exit_code)
+    exit(main())
