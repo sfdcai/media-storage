@@ -373,6 +373,8 @@ OTHER_FILES=(
     "media-pipeline.service"
     "pm2_dashboard_config.js"
     "test_ports.py"
+    "test_icloud_connection.py"
+    "test_complete_system.py"
 )
 
 for file in "${OTHER_FILES[@]}"; do
