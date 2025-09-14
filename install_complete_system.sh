@@ -236,20 +236,42 @@ echo -e "${BLUE}=== Step 7: Copy Application Files ===${NC}"
 # Copy application files to project directory
 FILES_COPIED=0
 
-# Copy database viewer
-if [ -f "db_viewer.py" ]; then
-    if [ ! -f "$PROJECT_DIR/db_viewer.py" ] || [ "db_viewer.py" -nt "$PROJECT_DIR/db_viewer.py" ]; then
-        cp db_viewer.py "$PROJECT_DIR/"
-        chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/db_viewer.py"
-        chmod +x "$PROJECT_DIR/db_viewer.py"
-        echo -e "${GREEN}✓ Database viewer copied${NC}"
-        FILES_COPIED=1
+# List of Python scripts to copy
+PYTHON_SCRIPTS=(
+    "web_ui.py"
+    "web_status_dashboard.py" 
+    "web_config_interface.py"
+    "db_viewer.py"
+    "media_db.py"
+    "pipeline_orchestrator.py"
+    "sync_icloud.py"
+    "sync_pixel.py"
+    "bulk_icloud_sync.py"
+    "bulk_pixel_sync.py"
+    "bulk_nas_sync.py"
+    "compress_media.py"
+    "delete_icloud.py"
+    "cleanup_icloud.py"
+    "telegram_notifier.py"
+    "test_pipeline.py"
+)
+
+# Copy Python scripts
+for script in "${PYTHON_SCRIPTS[@]}"; do
+    if [ -f "$script" ]; then
+        if [ ! -f "$PROJECT_DIR/$script" ] || [ "$script" -nt "$PROJECT_DIR/$script" ]; then
+            cp "$script" "$PROJECT_DIR/"
+            chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/$script"
+            chmod +x "$PROJECT_DIR/$script"
+            echo -e "${GREEN}✓ $script copied${NC}"
+            FILES_COPIED=1
+        else
+            echo -e "${GREEN}✓ $script already up to date${NC}"
+        fi
     else
-        echo -e "${GREEN}✓ Database viewer already up to date${NC}"
+        echo -e "${YELLOW}⚠ $script not found, skipping${NC}"
     fi
-else
-    echo -e "${YELLOW}⚠ db_viewer.py not found, skipping${NC}"
-fi
+done
 
 # Copy PM2 ecosystem config
 if [ -f "ecosystem.config.js" ]; then
@@ -263,6 +285,39 @@ if [ -f "ecosystem.config.js" ]; then
     fi
 else
     echo -e "${YELLOW}⚠ ecosystem.config.js not found, skipping${NC}"
+fi
+
+# Copy common directory
+if [ -d "common" ]; then
+    if [ ! -d "$PROJECT_DIR/common" ]; then
+        cp -r common "$PROJECT_DIR/"
+        chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/common/"
+        echo -e "${GREEN}✓ Common directory copied${NC}"
+        FILES_COPIED=1
+    else
+        # Check if common directory needs updating
+        COMMON_UPDATED=0
+        for file in common/*; do
+            if [ -f "$file" ]; then
+                file_name=$(basename "$file")
+                if [ ! -f "$PROJECT_DIR/common/$file_name" ] || [ "$file" -nt "$PROJECT_DIR/common/$file_name" ]; then
+                    COMMON_UPDATED=1
+                    break
+                fi
+            fi
+        done
+        
+        if [ $COMMON_UPDATED -eq 1 ]; then
+            cp -r common/* "$PROJECT_DIR/common/"
+            chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/common/"
+            echo -e "${GREEN}✓ Common directory updated${NC}"
+            FILES_COPIED=1
+        else
+            echo -e "${GREEN}✓ Common directory already up to date${NC}"
+        fi
+    fi
+else
+    echo -e "${YELLOW}⚠ common directory not found, skipping${NC}"
 fi
 
 # Copy templates
@@ -290,6 +345,29 @@ if [ -d "templates" ]; then
 else
     echo -e "${YELLOW}⚠ templates directory not found, skipping${NC}"
 fi
+
+# Copy other important files
+OTHER_FILES=(
+    "config.yaml"
+    "requirements.txt"
+    "cleanup_files.sh"
+)
+
+for file in "${OTHER_FILES[@]}"; do
+    if [ -f "$file" ]; then
+        if [ ! -f "$PROJECT_DIR/$file" ] || [ "$file" -nt "$PROJECT_DIR/$file" ]; then
+            cp "$file" "$PROJECT_DIR/"
+            chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/$file"
+            chmod +x "$PROJECT_DIR/$file" 2>/dev/null || true
+            echo -e "${GREEN}✓ $file copied${NC}"
+            FILES_COPIED=1
+        else
+            echo -e "${GREEN}✓ $file already up to date${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠ $file not found, skipping${NC}"
+    fi
+done
 
 if [ $FILES_COPIED -eq 0 ]; then
     echo -e "${GREEN}✓ All application files already up to date${NC}"
