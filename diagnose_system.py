@@ -15,59 +15,149 @@ def check_python_imports():
     """Check if all required Python modules can be imported"""
     print("🔍 Checking Python imports...")
     
-    required_modules = [
-        'flask',
-        'flask_socketio', 
-        'flask_cors',
-        'psutil',
-        'yaml',
-        'requests',
-        'PIL',
-        'sqlite3',
-        'datetime',
-        'pathlib',
-        'threading',
-        'json',
-        'time'
-    ]
-    
-    missing_modules = []
-    for module in required_modules:
+    # Check if we're in the virtual environment
+    venv_python = '/opt/media-pipeline/venv/bin/python'
+    if Path(venv_python).exists():
+        print("  Using virtual environment Python for import checks...")
         try:
-            importlib.import_module(module)
-            print(f"  ✅ {module}")
-        except ImportError as e:
-            print(f"  ❌ {module}: {e}")
-            missing_modules.append(module)
-    
-    return missing_modules
+            result = subprocess.run([
+                venv_python, '-c', '''
+import sys
+required_modules = [
+    "flask", "flask_socketio", "flask_cors", "psutil", "yaml", 
+    "requests", "PIL", "sqlite3", "datetime", "pathlib", 
+    "threading", "json", "time"
+]
+missing = []
+for module in required_modules:
+    try:
+        __import__(module)
+        print(f"OK:{module}")
+    except ImportError as e:
+        print(f"FAIL:{module}:{e}")
+        missing.append(module)
+if missing:
+    sys.exit(1)
+else:
+    sys.exit(0)
+'''
+            ], capture_output=True, text=True, cwd='/opt/media-pipeline')
+            
+            missing_modules = []
+            for line in result.stdout.strip().split('\n'):
+                if line.startswith('OK:'):
+                    module = line.split(':', 1)[1]
+                    print(f"  ✅ {module}")
+                elif line.startswith('FAIL:'):
+                    parts = line.split(':', 2)
+                    module = parts[1]
+                    error = parts[2] if len(parts) > 2 else "Import failed"
+                    print(f"  ❌ {module}: {error}")
+                    missing_modules.append(module)
+            
+            return missing_modules
+            
+        except Exception as e:
+            print(f"  ❌ Error checking virtual environment imports: {e}")
+            return ['virtual_env_check_failed']
+    else:
+        print("  ⚠️ Virtual environment not found, checking system Python...")
+        required_modules = [
+            'flask', 'flask_socketio', 'flask_cors', 'psutil', 'yaml',
+            'requests', 'PIL', 'sqlite3', 'datetime', 'pathlib',
+            'threading', 'json', 'time'
+        ]
+        
+        missing_modules = []
+        for module in required_modules:
+            try:
+                importlib.import_module(module)
+                print(f"  ✅ {module}")
+            except ImportError as e:
+                print(f"  ❌ {module}: {e}")
+                missing_modules.append(module)
+        
+        return missing_modules
 
 def check_local_imports():
     """Check if local modules can be imported"""
     print("\n🔍 Checking local module imports...")
     
-    # Add current directory to path
-    current_dir = Path(__file__).parent
-    sys.path.insert(0, str(current_dir))
-    
-    local_modules = [
-        'common.config_manager',
-        'common.db_manager', 
-        'common.logger',
-        'common.auth',
-        'telegram_notifier'
-    ]
-    
-    missing_local = []
-    for module in local_modules:
+    # Check if we're in the virtual environment
+    venv_python = '/opt/media-pipeline/venv/bin/python'
+    if Path(venv_python).exists():
+        print("  Using virtual environment Python for local import checks...")
         try:
-            importlib.import_module(module)
-            print(f"  ✅ {module}")
-        except ImportError as e:
-            print(f"  ❌ {module}: {e}")
-            missing_local.append(module)
-    
-    return missing_local
+            result = subprocess.run([
+                venv_python, '-c', '''
+import sys
+import os
+sys.path.insert(0, "/opt/media-pipeline")
+
+local_modules = [
+    "common.config_manager",
+    "common.db_manager", 
+    "common.logger",
+    "common.auth",
+    "telegram_notifier"
+]
+
+missing = []
+for module in local_modules:
+    try:
+        __import__(module)
+        print(f"OK:{module}")
+    except ImportError as e:
+        print(f"FAIL:{module}:{e}")
+        missing.append(module)
+if missing:
+    sys.exit(1)
+else:
+    sys.exit(0)
+'''
+            ], capture_output=True, text=True, cwd='/opt/media-pipeline')
+            
+            missing_local = []
+            for line in result.stdout.strip().split('\n'):
+                if line.startswith('OK:'):
+                    module = line.split(':', 1)[1]
+                    print(f"  ✅ {module}")
+                elif line.startswith('FAIL:'):
+                    parts = line.split(':', 2)
+                    module = parts[1]
+                    error = parts[2] if len(parts) > 2 else "Import failed"
+                    print(f"  ❌ {module}: {error}")
+                    missing_local.append(module)
+            
+            return missing_local
+            
+        except Exception as e:
+            print(f"  ❌ Error checking virtual environment local imports: {e}")
+            return ['local_import_check_failed']
+    else:
+        print("  ⚠️ Virtual environment not found, checking system Python...")
+        # Add current directory to path
+        current_dir = Path(__file__).parent
+        sys.path.insert(0, str(current_dir))
+        
+        local_modules = [
+            'common.config_manager',
+            'common.db_manager', 
+            'common.logger',
+            'common.auth',
+            'telegram_notifier'
+        ]
+        
+        missing_local = []
+        for module in local_modules:
+            try:
+                importlib.import_module(module)
+                print(f"  ✅ {module}")
+            except ImportError as e:
+                print(f"  ❌ {module}: {e}")
+                missing_local.append(module)
+        
+        return missing_local
 
 def check_file_permissions():
     """Check if Python scripts are executable"""
