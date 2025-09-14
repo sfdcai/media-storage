@@ -375,6 +375,7 @@ OTHER_FILES=(
     "test_ports.py"
     "test_icloud_connection.py"
     "test_complete_system.py"
+    "test_imports.py"
 )
 
 for file in "${OTHER_FILES[@]}"; do

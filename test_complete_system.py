@@ -102,7 +102,7 @@ def test_database():
     try:
         # Add project directory to path
         sys.path.insert(0, '/opt/media-pipeline')
-        from common.db_manager import db_manager
+        from common.database import db_manager
         
         # Test database connection
         db_manager.init_database()
@@ -130,7 +130,7 @@ def test_icloud_config():
     
     try:
         sys.path.insert(0, '/opt/media-pipeline')
-        from common.config_manager import config_manager
+        from common.config import config_manager
         
         icloud_config = config_manager.get_icloud_config()
         

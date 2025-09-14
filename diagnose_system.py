@@ -95,8 +95,8 @@ import os
 sys.path.insert(0, "/opt/media-pipeline")
 
 local_modules = [
-    "common.config_manager",
-    "common.db_manager", 
+    "common.config",
+    "common.database", 
     "common.logger",
     "common.auth",
     "telegram_notifier"
@@ -141,8 +141,8 @@ else:
         sys.path.insert(0, str(current_dir))
         
         local_modules = [
-            'common.config_manager',
-            'common.db_manager', 
+            'common.config',
+            'common.database', 
             'common.logger',
             'common.auth',
             'telegram_notifier'
