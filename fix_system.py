@@ -113,13 +113,18 @@ def fix_database():
     db_path = '/opt/media-pipeline/media.db'
     if not Path(db_path).exists():
         print("  Creating new database...")
-        # Run the database initialization
+    else:
+        print("  Database exists, checking tables...")
+    
+    # Always run database initialization to ensure tables exist
+    if Path('/opt/media-pipeline/init_database.py').exists():
         run_command(
-            'cd /opt/media-pipeline && /opt/media-pipeline/venv/bin/python -c "from common.db_manager import db_manager; db_manager.init_database()"',
-            'Initializing database'
+            'cd /opt/media-pipeline && /opt/media-pipeline/venv/bin/python init_database.py',
+            'Initializing database tables'
         )
     else:
-        print("  ✅ Database already exists")
+        print("  ⚠️ Database initialization script not found")
+        return False
     
     return True
 
@@ -221,6 +226,21 @@ def main():
         fix_nginx,
         fix_pm2
     ]
+    
+    # Additional fixes
+    def fix_pm2_dashboard():
+        """Start PM2 dashboard"""
+        print("\n🔧 Starting PM2 dashboard...")
+        if Path('/opt/media-pipeline/start_pm2_dashboard.py').exists():
+            return run_command(
+                'cd /opt/media-pipeline && /opt/media-pipeline/venv/bin/python start_pm2_dashboard.py',
+                'Starting PM2 dashboard'
+            )
+        else:
+            print("  ⚠️ PM2 dashboard script not found")
+            return False
+    
+    fixes.append(fix_pm2_dashboard)
     
     for fix_func in fixes:
         try:

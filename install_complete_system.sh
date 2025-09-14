@@ -367,6 +367,8 @@ OTHER_FILES=(
     "cleanup_files.sh"
     "diagnose_system.py"
     "fix_system.py"
+    "init_database.py"
+    "start_pm2_dashboard.py"
 )
 
 for file in "${OTHER_FILES[@]}"; do
