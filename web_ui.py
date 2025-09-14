@@ -385,7 +385,7 @@ status_thread.start()
 if __name__ == '__main__':
     # Get configuration
     web_config = config_manager.get_logging_config()  # Using logging config for now
-    host = '127.0.0.1'
+    host = '0.0.0.0'  # Bind to all interfaces for external access
     port = 8080
     
     # Check for PORT environment variable first (PM2 override)

@@ -369,6 +369,10 @@ OTHER_FILES=(
     "fix_system.py"
     "init_database.py"
     "start_pm2_dashboard.py"
+    "fix_final_issues.py"
+    "media-pipeline.service"
+    "pm2_dashboard_config.js"
+    "test_ports.py"
 )
 
 for file in "${OTHER_FILES[@]}"; do

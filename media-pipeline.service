@@ -1,0 +1,28 @@
+[Unit]
+Description=Media Pipeline System
+After=network.target
+
+[Service]
+Type=forking
+User=media-pipeline
+Group=media-pipeline
+WorkingDirectory=/opt/media-pipeline
+ExecStart=/usr/bin/pm2 start /opt/media-pipeline/ecosystem.config.js
+ExecReload=/usr/bin/pm2 reload all
+ExecStop=/usr/bin/pm2 stop all
+Restart=always
+RestartSec=10
+
+# Environment variables
+Environment=NODE_ENV=production
+Environment=HOME=/opt/media-pipeline
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/media-pipeline /var/log/media-pipeline /mnt/wd_all_pictures
+
+[Install]
+WantedBy=multi-user.target
