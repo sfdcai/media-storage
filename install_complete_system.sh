@@ -196,6 +196,12 @@ else
     echo -e "${GREEN}✓ Service user already exists${NC}"
 fi
 
+# Ensure the service user can access the project directory
+echo -e "${GREEN}Setting up service user permissions...${NC}"
+usermod -d "$PROJECT_DIR" "$SERVICE_USER" 2>/dev/null || true
+chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR" 2>/dev/null || true
+chmod -R 755 "$PROJECT_DIR" 2>/dev/null || true
+
 echo ""
 echo -e "${BLUE}=== Step 6: Create Required Directories ===${NC}"
 
@@ -476,6 +482,10 @@ fi
 echo ""
 echo -e "${BLUE}=== Step 10: Start PM2 Applications ===${NC}"
 
+# Install missing Python dependencies
+echo -e "${GREEN}Installing additional Python dependencies...${NC}"
+"$PROJECT_DIR/venv/bin/pip" install psutil
+
 # Check if PM2 is already running applications
 if pm2 list | grep -q "online"; then
     echo -e "${GREEN}✓ PM2 applications already running${NC}"
@@ -494,6 +504,26 @@ else
     pm2 start "$PROJECT_DIR/ecosystem.config.js"
     pm2 save
     echo -e "${GREEN}✓ PM2 applications started${NC}"
+fi
+
+# Wait a moment for applications to start
+echo -e "${GREEN}Waiting for applications to start...${NC}"
+sleep 10
+
+# Check PM2 status and restart any failed applications
+echo -e "${GREEN}Checking PM2 application status...${NC}"
+pm2 list
+
+# Restart any applications that are not online
+FAILED_APPS=$(pm2 list | grep -E "(errored|stopped)" | awk '{print $2}' | tr -d '│')
+if [ -n "$FAILED_APPS" ]; then
+    echo -e "${YELLOW}Some applications failed to start, attempting to restart...${NC}"
+    for app in $FAILED_APPS; do
+        echo -e "${GREEN}Restarting $app...${NC}"
+        pm2 restart "$app"
+    done
+    pm2 save
+    echo -e "${GREEN}✓ Failed applications restarted${NC}"
 fi
 
 echo ""

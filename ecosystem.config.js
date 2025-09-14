@@ -99,7 +99,7 @@ module.exports = {
       name: 'syncthing',
       script: 'syncthing',
       args: '-gui-address=0.0.0.0:8385',
-      cwd: '/home/media-pipeline',
+      cwd: '/opt/media-pipeline',
       user: 'media-pipeline',
       instances: 1,
       autorestart: true,
