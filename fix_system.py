@@ -32,33 +32,28 @@ def fix_python_dependencies():
     # Ensure we're in the right directory
     os.chdir('/opt/media-pipeline')
     
-    # Install from requirements.txt
-    if Path('requirements.txt').exists():
-        success = run_command(
-            'pip3 install -r requirements.txt --upgrade',
-            'Installing Python packages from requirements.txt'
+    # Install system packages via apt
+    system_packages = [
+        'python3-flask',
+        'python3-flask-cors', 
+        'python3-requests',
+        'python3-yaml',
+        'python3-pil',
+        'python3-psutil',
+        'python3-dateutil'
+    ]
+    
+    for package in system_packages:
+        run_command(
+            f'apt install -y {package}',
+            f'Installing system package {package}'
         )
-    else:
-        # Fallback to essential packages
-        packages = [
-            'flask>=2.3.0',
-            'flask-socketio>=5.3.0', 
-            'flask-cors>=4.0.0',
-            'psutil>=5.9.0',
-            'pyicloud>=0.10.0',
-            'requests>=2.28.0',
-            'PyYAML>=6.0',
-            'Pillow>=9.0.0',
-            'python-dateutil>=2.8.0',
-            'colorlog>=6.7.0',
-            'schedule>=1.2.0'
-        ]
-        
-        for package in packages:
-            run_command(
-                f'pip3 install {package}',
-                f'Installing {package}'
-            )
+    
+    # Install pyicloud via pip (not available in apt)
+    run_command(
+        'pip3 install --break-system-packages pyicloud',
+        'Installing pyicloud via pip'
+    )
     
     return True
 

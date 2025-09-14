@@ -162,18 +162,37 @@ fi
 echo ""
 echo -e "${BLUE}=== Step 4: Install Python Dependencies ===${NC}"
 
-# Install Python packages globally for simplicity
-echo -e "${GREEN}Installing Python packages globally...${NC}"
-if [ -f "requirements.txt" ]; then
-    echo -e "${GREEN}Installing Python packages from requirements.txt...${NC}"
-    pip3 install -r requirements.txt
-    echo -e "${GREEN}✓ Python packages installed from requirements.txt${NC}"
-else
-    # Fallback to basic packages if requirements.txt not found
-    echo -e "${GREEN}Installing basic Python packages...${NC}"
-    pip3 install flask flask-socketio requests pyicloud psutil
-    echo -e "${GREEN}✓ Basic Python packages installed${NC}"
-fi
+# Install Python packages using system package manager
+echo -e "${GREEN}Installing Python packages via apt...${NC}"
+
+# Essential Python packages via apt
+PYTHON_PACKAGES=(
+    "python3-flask"
+    "python3-flask-cors" 
+    "python3-requests"
+    "python3-yaml"
+    "python3-pil"
+    "python3-psutil"
+    "python3-dateutil"
+    "python3-setuptools"
+    "python3-pip"
+)
+
+echo -e "${GREEN}Installing essential Python packages...${NC}"
+for package in "${PYTHON_PACKAGES[@]}"; do
+    if ! dpkg -l | grep -q "^ii  $package "; then
+        echo "Installing $package..."
+        apt install -y "$package"
+    else
+        echo -e "${GREEN}✓ $package already installed${NC}"
+    fi
+done
+
+# Install pyicloud via pip (it's not available in apt)
+echo -e "${GREEN}Installing pyicloud via pip...${NC}"
+pip3 install --break-system-packages pyicloud
+
+echo -e "${GREEN}✓ Python packages installed${NC}"
 
 echo ""
 echo -e "${BLUE}=== Step 5: Create Service User ===${NC}"
@@ -486,10 +505,10 @@ echo -e "${BLUE}=== Step 10: Start PM2 Applications ===${NC}"
 
 # Ensure all Python dependencies are installed
 echo -e "${GREEN}Ensuring all Python dependencies are installed...${NC}"
-if [ -f "$PROJECT_DIR/requirements.txt" ]; then
-    pip3 install -r "$PROJECT_DIR/requirements.txt" --upgrade
-else
-    pip3 install psutil pyicloud --upgrade
+# Install pyicloud if not already installed
+if ! python3 -c "import pyicloud" 2>/dev/null; then
+    echo "Installing pyicloud..."
+    pip3 install --break-system-packages pyicloud
 fi
 
 # Check if PM2 is already running applications
@@ -669,8 +688,8 @@ if [ -f "$PROJECT_DIR/diagnose_system.py" ]; then
                 echo -e "${GREEN}✅ System fix completed successfully!${NC}"
             else
                 echo -e "${RED}❌ System fix failed. Manual intervention required.${NC}"
-                echo -e "${YELLOW}Run: cd $PROJECT_DIR && python diagnose_system.py${NC}"
-                echo -e "${YELLOW}Then: cd $PROJECT_DIR && python fix_system.py${NC}"
+                echo -e "${YELLOW}Run: cd $PROJECT_DIR && python3 diagnose_system.py${NC}"
+                echo -e "${YELLOW}Then: cd $PROJECT_DIR && python3 fix_system.py${NC}"
             fi
         else
             echo -e "${RED}❌ Fix script not found. Manual intervention required.${NC}"
@@ -689,5 +708,5 @@ echo -e "${GREEN}✓ Services restarted only when necessary${NC}"
 echo -e "${GREEN}✓ Comprehensive system verification completed${NC}"
 echo ""
 echo -e "${YELLOW}💡 Tip: Run this script again anytime to update only what's needed!${NC}"
-echo -e "${YELLOW}🔧 Troubleshooting: cd $PROJECT_DIR && python diagnose_system.py${NC}"
-echo -e "${YELLOW}🛠️ Auto-fix: cd $PROJECT_DIR && python fix_system.py${NC}"
+echo -e "${YELLOW}🔧 Troubleshooting: cd $PROJECT_DIR && python3 diagnose_system.py${NC}"
+echo -e "${YELLOW}🛠️ Auto-fix: cd $PROJECT_DIR && python3 fix_system.py${NC}"

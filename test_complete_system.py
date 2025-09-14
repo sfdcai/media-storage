@@ -9,14 +9,27 @@ import sys
 import requests
 import subprocess
 import time
+import socket
 from pathlib import Path
+
+def get_local_ip():
+    """Get the local IP address"""
+    try:
+        # Connect to a remote address to determine local IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except:
+        return "127.0.0.1"
 
 def test_web_interfaces():
     """Test all web interfaces"""
     print("🌐 Testing Web Interfaces")
     print("=" * 40)
     
-    base_url = "http://192.168.1.15"
+    base_url = f"http://{get_local_ip()}"
     interfaces = [
         ("/", "Main Dashboard"),
         ("/pipeline/", "Pipeline Dashboard"),
@@ -50,7 +63,7 @@ def test_direct_ports():
     print("=" * 40)
     
     ports = [8080, 8081, 8082, 8083, 8084, 8385, 9615]
-    base_url = "http://192.168.1.15"
+    base_url = f"http://{get_local_ip()}"
     
     all_working = True
     
@@ -140,7 +153,7 @@ def test_icloud_config():
             return True
         else:
             print("  ⚠️ iCloud credentials not configured")
-            print("  📝 Please configure at: http://192.168.1.15:8083/")
+            print(f"  📝 Please configure at: http://{get_local_ip()}:8083/")
             return False
             
     except Exception as e:
@@ -207,7 +220,7 @@ def main():
     if passed == total:
         print("\n🎉 All tests passed! Your system is fully operational!")
         print("\n📋 Next steps:")
-        print("1. Configure iCloud credentials at: http://192.168.1.15:8083/")
+        print(f"1. Configure iCloud credentials at: http://{get_local_ip()}:8083/")
         print("2. Test iCloud connection: python3 test_icloud_connection.py")
         print("3. Run a test sync: python3 sync_icloud.py")
         print("4. Monitor progress in the web dashboards")

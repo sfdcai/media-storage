@@ -6,6 +6,7 @@ Tests iCloud authentication and prompts for 2FA if needed
 
 import os
 import sys
+import socket
 from pathlib import Path
 
 # Add the project directory to Python path
@@ -13,6 +14,18 @@ sys.path.insert(0, '/opt/media-pipeline')
 
 # Using system Python for simplicity
 print(f"🐍 Using Python: {sys.executable}")
+
+def get_local_ip():
+    """Get the local IP address"""
+    try:
+        # Connect to a remote address to determine local IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except:
+        return "127.0.0.1"
 
 def test_icloud_connection():
     """Test iCloud connection and handle 2FA"""
@@ -29,7 +42,7 @@ def test_icloud_connection():
         if not icloud_config.username or not icloud_config.password:
             print("❌ iCloud credentials not configured!")
             print("Please configure your iCloud credentials first:")
-            print("1. Go to: http://192.168.1.15:8083/")
+            print(f"1. Go to: http://{get_local_ip()}:8083/")
             print("2. Enter your Apple ID and password")
             print("3. Save the configuration")
             return False

@@ -9,12 +9,24 @@ import socket
 import time
 from urllib.parse import urljoin
 
+def get_local_ip():
+    """Get the local IP address"""
+    try:
+        # Connect to a remote address to determine local IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except:
+        return "127.0.0.1"
+
 def test_port_connectivity():
     """Test basic port connectivity"""
     print("🔍 Testing port connectivity...")
     
     ports = [80, 8080, 8081, 8082, 8083, 8084, 8385, 9615]
-    base_url = "http://192.168.1.15"
+    base_url = f"http://{get_local_ip()}"
     
     for port in ports:
         try:
@@ -43,7 +55,7 @@ def test_http_connectivity():
         (9615, "/", "PM2 Dashboard")
     ]
     
-    base_url = "http://192.168.1.15"
+    base_url = f"http://{get_local_ip()}"
     
     for port, path, name in services:
         url = f"{base_url}:{port}{path}"
@@ -74,7 +86,7 @@ def test_nginx_proxy():
         ("/pm2/", "PM2 Dashboard")
     ]
     
-    base_url = "http://192.168.1.15"
+    base_url = f"http://{get_local_ip()}"
     
     for route, name in proxy_routes:
         url = f"{base_url}{route}"

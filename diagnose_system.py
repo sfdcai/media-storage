@@ -15,10 +15,8 @@ def check_python_imports():
     """Check if all required Python modules can be imported"""
     print("🔍 Checking Python imports...")
     
-    # Check if we're in the virtual environment
-    system_python = 'python3'
-    if False:  # Disabled virtual environment check
-        print("  Using virtual environment Python for import checks...")
+    # Check Python modules using system Python
+    print("  Checking Python modules...")
         try:
             result = subprocess.run([
                 'python3', '-c', '''

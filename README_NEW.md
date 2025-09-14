@@ -25,7 +25,7 @@ A comprehensive media management and synchronization pipeline for handling photo
    ```bash
    cd /opt/media-pipeline
    source .env
-   /opt/media-pipeline/venv/bin/icloudpd --username $ICLOUD_USERNAME --directory /mnt/wd_all_pictures/incoming --download-only --recent 5
+   icloudpd --username $ICLOUD_USERNAME --directory /mnt/wd_all_pictures/incoming --download-only --recent 5
    ```
 
 4. **Run the pipeline:**
@@ -86,10 +86,10 @@ source .env
 python3 test_pipeline.py
 
 # Run the full pipeline
-/opt/media-pipeline/venv/bin/python pipeline_orchestrator.py
+python3 pipeline_orchestrator.py
 
 # Test iCloud connection
-/opt/media-pipeline/venv/bin/icloudpd --username $ICLOUD_USERNAME --directory /mnt/wd_all_pictures/incoming --download-only --recent 5
+icloudpd --username $ICLOUD_USERNAME --directory /mnt/wd_all_pictures/incoming --download-only --recent 5
 
 # View database
 sqlite3 /opt/media-pipeline/media.db

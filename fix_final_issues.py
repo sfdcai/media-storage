@@ -7,7 +7,20 @@ Fixes the remaining issues with the media pipeline system
 import os
 import subprocess
 import shutil
+import socket
 from pathlib import Path
+
+def get_local_ip():
+    """Get the local IP address"""
+    try:
+        # Connect to a remote address to determine local IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except:
+        return "127.0.0.1"
 
 def run_command(cmd, description):
     """Run a command and return success status"""
@@ -137,13 +150,14 @@ def main():
     
     print("\n🎉 Final fixes completed!")
     print("\nAccess URLs:")
-    print("  Web UI (Main): http://192.168.1.15/")
-    print("  Pipeline Dashboard: http://192.168.1.15:8081/")
-    print("  Status Dashboard: http://192.168.1.15:8082/")
-    print("  Configuration Interface: http://192.168.1.15:8083/")
-    print("  Database Viewer: http://192.168.1.15:8084/")
-    print("  Syncthing: http://192.168.1.15:8385/")
-    print("  PM2 Dashboard: http://192.168.1.15:9615/")
+    local_ip = get_local_ip()
+    print(f"  Web UI (Main): http://{local_ip}/")
+    print(f"  Pipeline Dashboard: http://{local_ip}:8081/")
+    print(f"  Status Dashboard: http://{local_ip}:8082/")
+    print(f"  Configuration Interface: http://{local_ip}:8083/")
+    print(f"  Database Viewer: http://{local_ip}:8084/")
+    print(f"  Syncthing: http://{local_ip}:8385/")
+    print(f"  PM2 Dashboard: http://{local_ip}:9615/")
     
     return 0
 
