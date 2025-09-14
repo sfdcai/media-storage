@@ -150,13 +150,13 @@ echo -e "${BLUE}=== Step 3: Install Syncthing ===${NC}"
 if command_exists syncthing; then
     echo -e "${GREEN}✓ Syncthing already installed: $(syncthing --version | head -n1)${NC}"
 else
-    echo -e "${GREEN}Installing Syncthing...${NC}"
+echo -e "${GREEN}Installing Syncthing...${NC}"
     # Use modern GPG key management instead of deprecated apt-key
     curl -s https://syncthing.net/release-key.txt | gpg --dearmor -o /usr/share/keyrings/syncthing-archive-keyring.gpg
     echo "deb [signed-by=/usr/share/keyrings/syncthing-archive-keyring.gpg] https://apt.syncthing.net/ syncthing stable" > /etc/apt/sources.list.d/syncthing.list
-    apt update
-    apt install -y syncthing
-    echo -e "${GREEN}✓ Syncthing installed${NC}"
+apt update
+apt install -y syncthing
+echo -e "${GREEN}✓ Syncthing installed${NC}"
 fi
 
 echo ""
@@ -166,22 +166,30 @@ echo -e "${BLUE}=== Step 4: Setup Python Virtual Environment ===${NC}"
 if dir_exists "$PROJECT_DIR/venv"; then
     echo -e "${GREEN}✓ Python virtual environment already exists${NC}"
     
-    # Check if required packages are installed
-    if "$PROJECT_DIR/venv/bin/pip" show flask flask-socketio requests icloudpd >/dev/null 2>&1; then
-        echo -e "${GREEN}✓ All Python packages already installed${NC}"
+    # Check if requirements.txt exists and install from it
+    if [ -f "requirements.txt" ]; then
+        echo -e "${GREEN}Installing Python packages from requirements.txt...${NC}"
+        "$PROJECT_DIR/venv/bin/pip" install -r requirements.txt
+        echo -e "${GREEN}✓ Python packages installed from requirements.txt${NC}"
     else
-        echo -e "${GREEN}Installing missing Python packages...${NC}"
-        "$PROJECT_DIR/venv/bin/pip" install flask flask-socketio requests icloudpd
-        echo -e "${GREEN}✓ Python packages installed${NC}"
+        # Fallback to basic packages if requirements.txt not found
+        echo -e "${GREEN}Installing basic Python packages...${NC}"
+        "$PROJECT_DIR/venv/bin/pip" install flask flask-socketio requests pyicloud psutil
+        echo -e "${GREEN}✓ Basic Python packages installed${NC}"
     fi
 else
-    echo -e "${GREEN}Creating Python virtual environment...${NC}"
-    python3 -m venv "$PROJECT_DIR/venv"
+echo -e "${GREEN}Creating Python virtual environment...${NC}"
+python3 -m venv "$PROJECT_DIR/venv"
 
-    # Install Python packages
-    echo -e "${GREEN}Installing Python packages...${NC}"
-    "$PROJECT_DIR/venv/bin/pip" install flask flask-socketio requests icloudpd
-    echo -e "${GREEN}✓ Python virtual environment created${NC}"
+# Install Python packages
+    if [ -f "requirements.txt" ]; then
+        echo -e "${GREEN}Installing Python packages from requirements.txt...${NC}"
+        "$PROJECT_DIR/venv/bin/pip" install -r requirements.txt
+    else
+        echo -e "${GREEN}Installing basic Python packages...${NC}"
+        "$PROJECT_DIR/venv/bin/pip" install flask flask-socketio requests pyicloud psutil
+    fi
+echo -e "${GREEN}✓ Python virtual environment created${NC}"
 fi
 
 echo ""
@@ -227,7 +235,7 @@ else
     for dir in "${DIRS_TO_CREATE[@]}"; do
         mkdir -p "$dir"
     done
-    echo -e "${GREEN}✓ Required directories created${NC}"
+echo -e "${GREEN}✓ Required directories created${NC}"
 fi
 
 # Set ownership (always do this to ensure correct permissions)
@@ -357,6 +365,8 @@ OTHER_FILES=(
     "config.yaml"
     "requirements.txt"
     "cleanup_files.sh"
+    "diagnose_system.py"
+    "fix_system.py"
 )
 
 for file in "${OTHER_FILES[@]}"; do
@@ -393,7 +403,7 @@ if [ -f "nginx-media-pipeline.conf" ]; then
     fi
 else
     echo -e "${YELLOW}⚠ nginx-media-pipeline.conf not found, creating basic config${NC}"
-    cat > /etc/nginx/sites-available/media-pipeline << EOF
+cat > /etc/nginx/sites-available/media-pipeline << EOF
 server {
     listen 80;
     server_name _;
@@ -434,7 +444,7 @@ if [ $NGINX_CONFIG_UPDATED -eq 1 ]; then
             service nginx reload
         else
             echo -e "${GREEN}Starting nginx...${NC}"
-            service nginx start
+service nginx start
         fi
         echo -e "${GREEN}✓ Nginx configured and running${NC}"
     else
@@ -450,8 +460,8 @@ echo -e "${BLUE}=== Step 9: Create Environment File ===${NC}"
 
 # Create .env file only if it doesn't exist
 if [ ! -f "$PROJECT_DIR/.env" ]; then
-    echo -e "${GREEN}Creating environment file...${NC}"
-    cat > "$PROJECT_DIR/.env" << EOF
+echo -e "${GREEN}Creating environment file...${NC}"
+cat > "$PROJECT_DIR/.env" << EOF
 # Media Pipeline Environment Configuration
 # Generated on $(date)
 
@@ -472,9 +482,9 @@ INCOMING_DIR=/mnt/wd_all_pictures/incoming
 PROCESSED_DIR=/mnt/wd_all_pictures/processed
 EOF
 
-    chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/.env"
-    chmod 600 "$PROJECT_DIR/.env"
-    echo -e "${GREEN}✓ Environment file created${NC}"
+chown "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR/.env"
+chmod 600 "$PROJECT_DIR/.env"
+echo -e "${GREEN}✓ Environment file created${NC}"
 else
     echo -e "${GREEN}✓ Environment file already exists${NC}"
 fi
@@ -482,9 +492,13 @@ fi
 echo ""
 echo -e "${BLUE}=== Step 10: Start PM2 Applications ===${NC}"
 
-# Install missing Python dependencies
-echo -e "${GREEN}Installing additional Python dependencies...${NC}"
-"$PROJECT_DIR/venv/bin/pip" install psutil
+# Ensure all Python dependencies are installed
+echo -e "${GREEN}Ensuring all Python dependencies are installed...${NC}"
+if [ -f "$PROJECT_DIR/requirements.txt" ]; then
+    "$PROJECT_DIR/venv/bin/pip" install -r "$PROJECT_DIR/requirements.txt" --upgrade
+else
+    "$PROJECT_DIR/venv/bin/pip" install psutil pyicloud --upgrade
+fi
 
 # Check if PM2 is already running applications
 if pm2 list | grep -q "online"; then
@@ -500,10 +514,10 @@ if pm2 list | grep -q "online"; then
         echo -e "${GREEN}✓ PM2 applications up to date${NC}"
     fi
 else
-    echo -e "${GREEN}Starting PM2 applications...${NC}"
-    pm2 start "$PROJECT_DIR/ecosystem.config.js"
-    pm2 save
-    echo -e "${GREEN}✓ PM2 applications started${NC}"
+echo -e "${GREEN}Starting PM2 applications...${NC}"
+pm2 start "$PROJECT_DIR/ecosystem.config.js"
+pm2 save
+echo -e "${GREEN}✓ PM2 applications started${NC}"
 fi
 
 # Wait a moment for applications to start
@@ -643,10 +657,45 @@ echo -e "${GREEN}🎉 Complete Media Pipeline System Installed! 🎉${NC}"
 echo -e "${GREEN}Use the Database Viewer to explore your downloaded media data!${NC}"
 
 echo ""
+echo -e "${BLUE}=== Final System Verification ===${NC}"
+
+# Run comprehensive diagnostic
+echo -e "${GREEN}Running system diagnostic...${NC}"
+if [ -f "$PROJECT_DIR/diagnose_system.py" ]; then
+    cd "$PROJECT_DIR"
+    "$PROJECT_DIR/venv/bin/python" diagnose_system.py
+    DIAGNOSTIC_RESULT=$?
+    
+    if [ $DIAGNOSTIC_RESULT -eq 0 ]; then
+        echo -e "${GREEN}✅ System diagnostic passed - all components working!${NC}"
+    else
+        echo -e "${YELLOW}⚠️ System diagnostic found issues. Running automatic fix...${NC}"
+        if [ -f "$PROJECT_DIR/fix_system.py" ]; then
+            "$PROJECT_DIR/venv/bin/python" fix_system.py
+            FIX_RESULT=$?
+            if [ $FIX_RESULT -eq 0 ]; then
+                echo -e "${GREEN}✅ System fix completed successfully!${NC}"
+            else
+                echo -e "${RED}❌ System fix failed. Manual intervention required.${NC}"
+                echo -e "${YELLOW}Run: cd $PROJECT_DIR && python diagnose_system.py${NC}"
+                echo -e "${YELLOW}Then: cd $PROJECT_DIR && python fix_system.py${NC}"
+            fi
+        else
+            echo -e "${RED}❌ Fix script not found. Manual intervention required.${NC}"
+        fi
+    fi
+else
+    echo -e "${YELLOW}⚠️ Diagnostic script not found, skipping verification${NC}"
+fi
+
+echo ""
 echo -e "${BLUE}=== Installation Summary ===${NC}"
 echo -e "${GREEN}✓ Optimized installation completed successfully${NC}"
 echo -e "${GREEN}✓ Only missing components were installed/updated${NC}"
 echo -e "${GREEN}✓ Existing configurations preserved${NC}"
 echo -e "${GREEN}✓ Services restarted only when necessary${NC}"
+echo -e "${GREEN}✓ Comprehensive system verification completed${NC}"
 echo ""
 echo -e "${YELLOW}💡 Tip: Run this script again anytime to update only what's needed!${NC}"
+echo -e "${YELLOW}🔧 Troubleshooting: cd $PROJECT_DIR && python diagnose_system.py${NC}"
+echo -e "${YELLOW}🛠️ Auto-fix: cd $PROJECT_DIR && python fix_system.py${NC}"
