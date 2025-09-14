@@ -54,7 +54,23 @@ fi
 
 # Install PM2 globally
 echo -e "${GREEN}Installing PM2...${NC}"
-npm install -g pm2
+# Ensure Node.js is available (in case NVM was used)
+if ! command -v node &> /dev/null; then
+    echo -e "${YELLOW}Node.js not found in PATH, trying to source NVM...${NC}"
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+fi
+
+# Verify Node.js is available
+if command -v node &> /dev/null; then
+    echo -e "${GREEN}Node.js version: $(node --version)${NC}"
+    echo -e "${GREEN}NPM version: $(npm --version)${NC}"
+    npm install -g pm2
+else
+    echo -e "${RED}Node.js not found. Please install Node.js first.${NC}"
+    exit 1
+fi
 
 echo -e "${GREEN}✓ Node.js and PM2 installed${NC}"
 
@@ -63,8 +79,9 @@ echo -e "${BLUE}=== Step 3: Install Syncthing ===${NC}"
 
 # Install Syncthing
 echo -e "${GREEN}Installing Syncthing...${NC}"
-curl -s https://syncthing.net/release-key.txt | apt-key add -
-echo "deb https://apt.syncthing.net/ syncthing stable" > /etc/apt/sources.list.d/syncthing.list
+# Use modern GPG key management instead of deprecated apt-key
+curl -s https://syncthing.net/release-key.txt | gpg --dearmor -o /usr/share/keyrings/syncthing-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/syncthing-archive-keyring.gpg] https://apt.syncthing.net/ syncthing stable" > /etc/apt/sources.list.d/syncthing.list
 apt update
 apt install -y syncthing
 
@@ -664,7 +681,68 @@ pm2 save
 echo -e "${GREEN}✓ PM2 applications started${NC}"
 
 echo ""
-echo -e "${BLUE}=== Step 11: Verify Services ===${NC}"
+echo -e "${BLUE}=== Step 11: Verify Dependencies ===${NC}"
+
+# Verify all critical dependencies
+echo -e "${GREEN}Verifying dependencies...${NC}"
+
+# Check Node.js and NPM
+if command -v node &> /dev/null; then
+    echo -e "${GREEN}✓ Node.js: $(node --version)${NC}"
+else
+    echo -e "${RED}✗ Node.js: NOT FOUND${NC}"
+fi
+
+if command -v npm &> /dev/null; then
+    echo -e "${GREEN}✓ NPM: $(npm --version)${NC}"
+else
+    echo -e "${RED}✗ NPM: NOT FOUND${NC}"
+fi
+
+# Check PM2
+if command -v pm2 &> /dev/null; then
+    echo -e "${GREEN}✓ PM2: $(pm2 --version)${NC}"
+else
+    echo -e "${RED}✗ PM2: NOT FOUND${NC}"
+fi
+
+# Check Python
+if command -v python3 &> /dev/null; then
+    echo -e "${GREEN}✓ Python3: $(python3 --version)${NC}"
+else
+    echo -e "${RED}✗ Python3: NOT FOUND${NC}"
+fi
+
+# Check pip
+if command -v pip3 &> /dev/null; then
+    echo -e "${GREEN}✓ pip3: $(pip3 --version | cut -d' ' -f2)${NC}"
+else
+    echo -e "${RED}✗ pip3: NOT FOUND${NC}"
+fi
+
+# Check Syncthing
+if command -v syncthing &> /dev/null; then
+    echo -e "${GREEN}✓ Syncthing: $(syncthing --version | head -n1)${NC}"
+else
+    echo -e "${RED}✗ Syncthing: NOT FOUND${NC}"
+fi
+
+# Check Nginx
+if command -v nginx &> /dev/null; then
+    echo -e "${GREEN}✓ Nginx: $(nginx -v 2>&1 | cut -d' ' -f3)${NC}"
+else
+    echo -e "${RED}✗ Nginx: NOT FOUND${NC}"
+fi
+
+# Check SQLite
+if command -v sqlite3 &> /dev/null; then
+    echo -e "${GREEN}✓ SQLite3: $(sqlite3 --version | cut -d' ' -f1)${NC}"
+else
+    echo -e "${RED}✗ SQLite3: NOT FOUND${NC}"
+fi
+
+echo ""
+echo -e "${BLUE}=== Step 12: Verify Services ===${NC}"
 
 # Wait for services to start
 sleep 5
