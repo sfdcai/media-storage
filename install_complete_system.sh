@@ -43,8 +43,14 @@ echo -e "${BLUE}=== Step 2: Install Node.js and PM2 ===${NC}"
 
 # Install Node.js
 echo -e "${GREEN}Installing Node.js...${NC}"
-curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-apt install -y nodejs
+# Try NodeSource first, fallback to Ubuntu package if it fails
+if curl -fsSL https://deb.nodesource.com/setup_18.x | bash -; then
+    echo -e "${GREEN}NodeSource repository added successfully${NC}"
+    apt install -y nodejs
+else
+    echo -e "${YELLOW}NodeSource repository failed, using Ubuntu default Node.js${NC}"
+    apt install -y nodejs npm
+fi
 
 # Install PM2 globally
 echo -e "${GREEN}Installing PM2...${NC}"
