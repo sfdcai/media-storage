@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Pipeline Status Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { background: #2c3e50; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }
+        .status-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .status-card h3 { margin-top: 0; color: #2c3e50; }
+        .status-indicator { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+        .status-active { background-color: #27ae60; }
+        .status-inactive { background-color: #e74c3c; }
+        .status-error { background-color: #f39c12; }
+        .service-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+        .service-item:last-child { border-bottom: none; }
+        .service-actions { display: flex; gap: 10px; }
+        .btn { padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .btn-start { background-color: #27ae60; color: white; }
+        .btn-stop { background-color: #e74c3c; color: white; }
+        .btn-restart { background-color: #3498db; color: white; }
+        .btn:hover { opacity: 0.8; }
+        .logs { background-color: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; }
+        .timestamp { color: #7f8c8d; font-size: 12px; }
+        .refresh-btn { background-color: #3498db; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 20px; }
+        .refresh-btn:hover { background-color: #2980b9; }
+        .issues-section { background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+        .issue-item { background-color: white; border-left: 4px solid #e74c3c; padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .issue-critical { border-left-color: #e74c3c; }
+        .issue-high { border-left-color: #f39c12; }
+        .issue-medium { border-left-color: #3498db; }
+        .troubleshooting { background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px; margin-top: 10px; }
+        .troubleshooting h4 { margin-top: 0; color: #495057; }
+        .troubleshooting ul { margin: 10px 0; padding-left: 20px; }
+        .troubleshooting li { margin: 5px 0; }
+        .progress-bar { width: 100%; height: 20px; background-color: #e9ecef; border-radius: 10px; overflow: hidden; margin: 5px 0; }
+        .progress-fill { height: 100%; background-color: #28a745; transition: width 0.3s ease; }
+        .progress-fill.warning { background-color: #ffc107; }
+        .progress-fill.danger { background-color: #dc3545; }
+        .tab-container { margin-bottom: 20px; }
+        .tab-buttons { display: flex; gap: 10px; margin-bottom: 10px; }
+        .tab-btn { padding: 10px 20px; border: none; background-color: #e9ecef; cursor: pointer; border-radius: 4px; }
+        .tab-btn.active { background-color: #007bff; color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .command-input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; }
+        .command-output { background-color: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Media Pipeline Status Dashboard</h1>
+            <p class="timestamp">Last updated: <span id="last-updated">Loading...</span></p>
+        </div>
+        
+        <button class="refresh-btn" onclick="requestStatus()">Refresh Status</button>
+        
+        <!-- Issues Section -->
+        <div id="issues-section" class="issues-section" style="display: none;">
+            <h3>⚠ Issues Detected</h3>
+            <div id="issues-list"></div>
+        </div>
+        
+        <div class="tab-container">
+            <div class="tab-buttons">
+                <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
+                <button class="tab-btn" onclick="showTab('system')">System</button>
+                <button class="tab-btn" onclick="showTab('services')">Services</button>
+                <button class="tab-btn" onclick="showTab('logs')">Logs</button>
+                <button class="tab-btn" onclick="showTab('database')">Database</button>
+                <button class="tab-btn" onclick="showTab('troubleshooting')">Troubleshooting</button>
+            </div>
+            
+            <!-- Overview Tab -->
+            <div id="overview-tab" class="tab-content active">
+                <div class="status-grid">
+                    <div class="status-card">
+                        <h3>System Health</h3>
+                        <div id="system-health">Loading...</div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <h3>Services Status</h3>
+                        <div id="services-overview">Loading...</div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <h3>Port Status</h3>
+                        <div id="ports-overview">Loading...</div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <h3>Database Status</h3>
+                        <div id="database-overview">Loading...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- System Tab -->
+            <div id="system-tab" class="tab-content">
+                <div class="status-grid">
+                    <div class="status-card">
+                        <h3>System Information</h3>
+                        <div id="system-info">Loading...</div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <h3>Resource Usage</h3>
+                        <div id="resource-usage">Loading...</div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <h3>Network Connectivity</h3>
+                        <div id="network-connectivity">Loading...</div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <h3>File Status</h3>
+                        <div id="files-status">Loading...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Services Tab -->
+            <div id="services-tab" class="tab-content">
+                <div class="status-grid">
+                    <div class="status-card">
+                        <h3>System Services</h3>
+                        <div id="services-status">Loading...</div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <h3>PM2 Processes</h3>
+                        <div id="pm2-status">Loading...</div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <h3>Process Status</h3>
+                        <div id="processes-status">Loading...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Logs Tab -->
+            <div id="logs-tab" class="tab-content">
+                <div class="status-card">
+                    <h3>Service Logs</h3>
+                    <div id="logs-status">Loading...</div>
+                </div>
+            </div>
+            
+            <!-- Database Tab -->
+            <div id="database-tab" class="tab-content">
+                <div class="status-grid">
+                    <div class="status-card">
+                        <h3>Database Statistics</h3>
+                        <div id="database-stats">Loading...</div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <h3>Database Query</h3>
+                        <textarea id="db-query" class="command-input" placeholder="SELECT * FROM media_files LIMIT 10;"></textarea>
+                        <button class="btn btn-success" onclick="executeDatabaseQuery()">Execute Query</button>
+                        <div id="db-query-result" class="command-output" style="margin-top: 10px;"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Troubleshooting Tab -->
+            <div id="troubleshooting-tab" class="tab-content">
+                <div class="status-grid">
+                    <div class="status-card">
+                        <h3>System Commands</h3>
+                        <input type="text" id="system-command" class="command-input" placeholder="df -h" list="command-suggestions">
+                        <datalist id="command-suggestions">
+                            <option value="df -h">
+                            <option value="free -h">
+                            <option value="uptime">
+                            <option value="ps aux">
+                            <option value="netstat -tlnp">
+                            <option value="systemctl status">
+                            <option value="pm2 status">
+                        </datalist>
+                        <button class="btn btn-success" onclick="executeSystemCommand()">Execute Command</button>
+                        <div id="command-output" class="command-output" style="margin-top: 10px;"></div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <h3>Log Viewer</h3>
+                        <select id="log-type" onchange="loadLogs()">
+                            <option value="system">System Log</option>
+                            <option value="nginx">Nginx Log</option>
+                            <option value="media_pipeline">Media Pipeline Log</option>
+                            <option value="pm2">PM2 Log</option>
+                            <option value="syncthing">Syncthing Log</option>
+                        </select>
+                        <input type="number" id="log-lines" value="50" min="10" max="500" style="width: 80px; margin-left: 10px;">
+                        <button class="btn btn-success" onclick="loadLogs()">Load Logs</button>
+                        <div id="log-content" class="command-output" style="margin-top: 10px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        
+        socket.on('connect', function() {
+            console.log('Connected to server');
+            requestStatus();
+        });
+        
+        socket.on('status', function(data) {
+            updateDashboard(data);
+        });
+        
+        function requestStatus() {
+            socket.emit('request_status');
+        }
+        
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        function updateDashboard(data) {
+            document.getElementById('last-updated').textContent = new Date(data.timestamp).toLocaleString();
+            
+            // Update issues section
+            updateIssues(data.issues || []);
+            
+            // Update overview tab
+            updateSystemHealth(data);
+            updateServicesOverview(data);
+            updatePortsOverview(data);
+            updateDatabaseOverview(data);
+            
+            // Update system tab
+            updateSystemInfo(data);
+            updateResourceUsage(data);
+            updateNetworkConnectivity(data);
+            updateFilesStatus(data);
+            
+            // Update services tab
+            updateServicesStatus(data);
+            updatePM2Status(data);
+            updateProcessesStatus(data);
+            
+            // Update logs tab
+            updateLogsStatus(data);
+            
+            // Update database tab
+            updateDatabaseStats(data);
+        }
+        
+        function updateIssues(issues) {
+            const issuesSection = document.getElementById('issues-section');
+            const issuesList = document.getElementById('issues-list');
+            
+            if (issues.length === 0) {
+                issuesSection.style.display = 'none';
+                return;
+            }
+            
+            issuesSection.style.display = 'block';
+            issuesList.innerHTML = '';
+            
+            issues.forEach(issue => {
+                const issueDiv = document.createElement('div');
+                issueDiv.className = `issue-item issue-${issue.severity}`;
+                issueDiv.innerHTML = `
+                    <h4>${issue.guide.title}</h4>
+                    <p><strong>Issue:</strong> ${issue.message}</p>
+                    <div class="troubleshooting">
+                        <h4>Solutions:</h4>
+                        <ul>
+                            ${issue.guide.solutions.map(solution => `<li>${solution}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+                issuesList.appendChild(issueDiv);
+            });
+        }
+        
+        function updateSystemHealth(data) {
+            const systemHealth = document.getElementById('system-health');
+            const issues = data.issues || [];
+            const criticalIssues = issues.filter(i => i.severity === 'critical').length;
+            const highIssues = issues.filter(i => i.severity === 'high').length;
+            
+            let healthStatus = 'Good';
+            let healthColor = '#27ae60';
+            
+            if (criticalIssues > 0) {
+                healthStatus = 'Critical';
+                healthColor = '#e74c3c';
+            } else if (highIssues > 0) {
+                healthStatus = 'Warning';
+                healthColor = '#f39c12';
+            }
+            
+            systemHealth.innerHTML = `
+                <p><strong>Overall Status:</strong> <span style="color: ${healthColor}">${healthStatus}</span></p>
+                <p><strong>Issues:</strong> ${issues.length} total (${criticalIssues} critical, ${highIssues} high)</p>
+                <p><strong>Uptime:</strong> ${data.system.uptime}</p>
+                <p><strong>Container IP:</strong> ${data.system.container_ip}</p>
+            `;
+        }
+        
+        function updateServicesOverview(data) {
+            const servicesOverview = document.getElementById('services-overview');
+            const services = data.services || {};
+            const runningServices = Object.values(services).filter(s => s.running).length;
+            const totalServices = Object.keys(services).length;
+            
+            servicesOverview.innerHTML = `
+                <p><strong>Services Running:</strong> ${runningServices}/${totalServices}</p>
+                ${Object.entries(services).map(([name, status]) => `
+                    <div class="service-item">
+                        <div>
+                            <span class="status-indicator ${status.running ? 'status-active' : 'status-inactive'}"></span>
+                            <strong>${name}</strong>
+                        </div>
+                        <div>${status.running ? 'Running' : 'Stopped'}</div>
+                    </div>
+                `).join('')}
+            `;
+        }
+        
+        function updatePortsOverview(data) {
+            const portsOverview = document.getElementById('ports-overview');
+            const ports = data.ports || {};
+            const listeningPorts = Object.values(ports).filter(p => p.listening).length;
+            const totalPorts = Object.keys(ports).length;
+            
+            portsOverview.innerHTML = `
+                <p><strong>Ports Listening:</strong> ${listeningPorts}/${totalPorts}</p>
+                ${Object.entries(ports).map(([name, status]) => `
+                    <div class="service-item">
+                        <div>
+                            <span class="status-indicator ${status.listening ? 'status-active' : 'status-inactive'}"></span>
+                            <strong>Port ${status.port}</strong>
+                        </div>
+                        <div>${status.listening ? 'Listening' : 'Not Listening'}</div>
+                    </div>
+                `).join('')}
+            `;
+        }
+        
+        function updateDatabaseOverview(data) {
+            const databaseOverview = document.getElementById('database-overview');
+            const db = data.database || {};
+            
+            if (db.error) {
+                databaseOverview.innerHTML = `<p style="color: #e74c3c;"><strong>Error:</strong> ${db.error}</p>`;
+                return;
+            }
+            
+            databaseOverview.innerHTML = `
+                <p><strong>Status:</strong> <span style="color: #27ae60;">${db.health}</span></p>
+                <p><strong>Total Records:</strong> ${db.total_records || 0}</p>
+                <p><strong>Database Size:</strong> ${formatBytes(db.database_size || 0)}</p>
+                <p><strong>Recent Activity (24h):</strong> ${db.recent_activity_24h || 0}</p>
+            `;
+        }
+        
+        function updateSystemInfo(data) {
+            const systemInfo = document.getElementById('system-info');
+            systemInfo.innerHTML = `
+                <p><strong>Container IP:</strong> ${data.system.container_ip}</p>
+                <p><strong>Uptime:</strong> ${data.system.uptime}</p>
+                <p><strong>Memory:</strong> ${data.system.available_memory} / ${data.system.total_memory}</p>
+                <p><strong>Disk Usage:</strong> ${data.system.disk_usage}</p>
+            `;
+        }
+        
+        function updateResourceUsage(data) {
+            const resourceUsage = document.getElementById('resource-usage');
+            const detailed = data.detailed_system || {};
+            
+            if (detailed.error) {
+                resourceUsage.innerHTML = `<p style="color: #e74c3c;">Error loading resource usage: ${detailed.error}</p>`;
+                return;
+            }
+            
+            const cpuPercent = detailed.cpu?.percent || 0;
+            const memoryPercent = detailed.memory?.percent || 0;
+            const diskPercent = detailed.disk?.percent || 0;
+            
+            resourceUsage.innerHTML = `
+                <div>
+                    <strong>CPU Usage:</strong> ${cpuPercent.toFixed(1)}%
+                    <div class="progress-bar">
+                        <div class="progress-fill ${cpuPercent > 80 ? 'danger' : cpuPercent > 60 ? 'warning' : ''}" 
+                             style="width: ${cpuPercent}%"></div>
+                    </div>
+                </div>
+                <div>
+                    <strong>Memory Usage:</strong> ${memoryPercent.toFixed(1)}%
+                    <div class="progress-bar">
+                        <div class="progress-fill ${memoryPercent > 80 ? 'danger' : memoryPercent > 60 ? 'warning' : ''}" 
+                             style="width: ${memoryPercent}%"></div>
+                    </div>
+                </div>
+                <div>
+                    <strong>Disk Usage:</strong> ${diskPercent.toFixed(1)}%
+                    <div class="progress-bar">
+                        <div class="progress-fill ${diskPercent > 80 ? 'danger' : diskPercent > 60 ? 'warning' : ''}" 
+                             style="width: ${diskPercent}%"></div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function updateNetworkConnectivity(data) {
+            const networkConnectivity = document.getElementById('network-connectivity');
+            const connectivity = data.network_connectivity || {};
+            
+            networkConnectivity.innerHTML = Object.entries(connectivity).map(([name, status]) => `
+                <div class="service-item">
+                    <div>
+                        <span class="status-indicator ${status.status ? 'status-active' : 'status-inactive'}"></span>
+                        <strong>${name.replace('_', ' ').toUpperCase()}</strong>
+                    </div>
+                    <div>${status.status ? 'Connected' : 'Failed'}</div>
+                </div>
+            `).join('');
+        }
+        
+        function updateFilesStatus(data) {
+            const filesStatus = document.getElementById('files-status');
+            const files = data.files || {};
+            
+            filesStatus.innerHTML = Object.entries(files).map(([file, status]) => `
+                <div class="service-item">
+                    <div>
+                        <span class="status-indicator ${status.exists ? 'status-active' : 'status-inactive'}"></span>
+                        <strong>${file.split('/').pop()}</strong>
+                    </div>
+                    <div>${status.exists ? `${formatBytes(status.size)}` : 'Missing'}</div>
+                </div>
+            `).join('');
+        }
+        
+        function updateServicesStatus(data) {
+            const servicesStatus = document.getElementById('services-status');
+            const services = data.services || {};
+            
+            servicesStatus.innerHTML = Object.entries(services).map(([service, status]) => `
+                <div class="service-item">
+                    <div>
+                        <span class="status-indicator ${status.running ? 'status-active' : 'status-inactive'}"></span>
+                        <strong>${service}</strong>
+                    </div>
+                    <div class="service-actions">
+                        <button class="btn btn-start" onclick="controlService('${service}', 'start')">Start</button>
+                        <button class="btn btn-stop" onclick="controlService('${service}', 'stop')">Stop</button>
+                        <button class="btn btn-restart" onclick="controlService('${service}', 'restart')">Restart</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function updatePM2Status(data) {
+            const pm2Status = document.getElementById('pm2-status');
+            const pm2 = data.pm2 || {};
+            
+            if (pm2.status === 'error') {
+                pm2Status.innerHTML = `<p style="color: #e74c3c;">PM2 Error: ${pm2.message}</p>`;
+                return;
+            }
+            
+            const processes = pm2.processes || [];
+            pm2Status.innerHTML = `
+                <p><strong>PM2 Status:</strong> <span style="color: #27ae60;">Running</span></p>
+                <p><strong>Processes:</strong> ${processes.length}</p>
+                ${processes.map(proc => `
+                    <div class="service-item">
+                        <div>
+                            <span class="status-indicator ${proc.pm2_env.status === 'online' ? 'status-active' : 'status-inactive'}"></span>
+                            <strong>${proc.name}</strong>
+                        </div>
+                        <div>${proc.pm2_env.status}</div>
+                    </div>
+                `).join('')}
+            `;
+        }
+        
+        function updateProcessesStatus(data) {
+            const processesStatus = document.getElementById('processes-status');
+            const processes = data.processes || {};
+            
+            processesStatus.innerHTML = Object.entries(processes).map(([process, status]) => `
+                <div class="service-item">
+                    <div>
+                        <span class="status-indicator ${status.running ? 'status-active' : 'status-inactive'}"></span>
+                        <strong>${process}</strong>
+                    </div>
+                    <div>${status.running ? 'Running' : 'Not Running'}</div>
+                </div>
+            `).join('');
+        }
+        
+        function updateLogsStatus(data) {
+            const logsStatus = document.getElementById('logs-status');
+            const logs = data.logs || {};
+            
+            logsStatus.innerHTML = Object.entries(logs).map(([service, logContent]) => `
+                <h4>${service}</h4>
+                <div class="logs">${logContent}</div>
+            `).join('');
+        }
+        
+        function updateDatabaseStats(data) {
+            const databaseStats = document.getElementById('database-stats');
+            const db = data.database || {};
+            
+            if (db.error) {
+                databaseStats.innerHTML = `<p style="color: #e74c3c;">Error: ${db.error}</p>`;
+                return;
+            }
+            
+            const tables = db.tables || {};
+            databaseStats.innerHTML = `
+                <p><strong>Database Health:</strong> <span style="color: #27ae60;">${db.health}</span></p>
+                <p><strong>Total Records:</strong> ${db.total_records || 0}</p>
+                <p><strong>Database Size:</strong> ${formatBytes(db.database_size || 0)}</p>
+                <p><strong>Recent Activity (24h):</strong> ${db.recent_activity_24h || 0}</p>
+                <h4>Tables:</h4>
+                ${Object.entries(tables).map(([table, count]) => `
+                    <div class="service-item">
+                        <div><strong>${table}</strong></div>
+                        <div>${count} records</div>
+                    </div>
+                `).join('')}
+            `;
+        }
+        
+        function controlService(service, action) {
+            fetch(`/api/service/${service}/${action}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`${action} ${service} successful`);
+                    setTimeout(requestStatus, 1000);
+                } else {
+                    alert(`Failed to ${action} ${service}: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                alert(`Error: ${error}`);
+            });
+        }
+        
+        function executeSystemCommand() {
+            const command = document.getElementById('system-command').value.trim();
+            if (!command) {
+                alert('Please enter a command');
+                return;
+            }
+            
+            fetch('/api/execute_command', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({command: command})
+            })
+            .then(response => response.json())
+            .then(data => {
+                const output = document.getElementById('command-output');
+                if (data.success) {
+                    output.textContent = data.output || 'Command executed successfully';
+                } else {
+                    output.textContent = `Error: ${data.error}`;
+                }
+            })
+            .catch(error => {
+                document.getElementById('command-output').textContent = `Error: ${error}`;
+            });
+        }
+        
+        function executeDatabaseQuery() {
+            const query = document.getElementById('db-query').value.trim();
+            if (!query) {
+                alert('Please enter a query');
+                return;
+            }
+            
+            fetch('/api/database/query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({query: query})
+            })
+            .then(response => response.json())
+            .then(data => {
+                const result = document.getElementById('db-query-result');
+                if (data.success) {
+                    let html = `Query executed successfully (${data.count} rows):\n\n`;
+                    if (data.columns && data.rows) {
+                        html += data.columns.join('\t') + '\n';
+                        html += data.rows.map(row => row.join('\t')).join('\n');
+                    }
+                    result.textContent = html;
+                } else {
+                    result.textContent = `Error: ${data.error}`;
+                }
+            })
+            .catch(error => {
+                document.getElementById('db-query-result').textContent = `Error: ${error}`;
+            });
+        }
+        
+        function loadLogs() {
+            const logType = document.getElementById('log-type').value;
+            const lines = document.getElementById('log-lines').value;
+            
+            fetch(`/api/logs/${logType}?lines=${lines}`)
+            .then(response => response.json())
+            .then(data => {
+                const logContent = document.getElementById('log-content');
+                if (data.error) {
+                    logContent.textContent = `Error: ${data.error}`;
+                } else {
+                    logContent.textContent = data.logs || 'No logs available';
+                }
+            })
+            .catch(error => {
+                document.getElementById('log-content').textContent = `Error: ${error}`;
+            });
+        }
+        
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // Auto-refresh every 30 seconds
+        setInterval(requestStatus, 30000);
+    </script>
+</body>
+</html>

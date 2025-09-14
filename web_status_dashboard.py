@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Media Pipeline Status Dashboard
-A standalone web UI that shows the status of all services and components
+A comprehensive web UI for monitoring, debugging, and troubleshooting the media pipeline
 """
 
 import os
@@ -10,7 +10,9 @@ import json
 import subprocess
 import socket
 import time
-from datetime import datetime
+import psutil
+import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # Add the project directory to Python path
@@ -23,7 +25,7 @@ try:
     from flask_socketio import SocketIO, emit
 except ImportError:
     print("Installing required packages...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "flask", "flask-socketio"])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "flask", "flask-socketio", "psutil"])
     from flask import Flask, render_template, jsonify, request
     from flask_socketio import SocketIO, emit
 
@@ -32,12 +34,66 @@ app.config['SECRET_KEY'] = 'media-pipeline-status-dashboard'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 class ServiceStatusChecker:
-    """Check the status of various services and components"""
+    """Check the status of various services and components with comprehensive monitoring"""
     
     def __init__(self):
         self.project_dir = "/opt/media-pipeline"
         self.service_user = "media-pipeline"
         self.log_dir = "/var/log/media-pipeline"
+        self.db_path = "/opt/media-pipeline/media.db"
+        
+        # Troubleshooting guides
+        self.troubleshooting_guides = {
+            "nodejs_not_found": {
+                "title": "Node.js Not Found",
+                "symptoms": ["Node.js command not found", "NPM not available"],
+                "solutions": [
+                    "Install Node.js via NVM: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash",
+                    "Source NVM: source ~/.bashrc",
+                    "Install Node.js: nvm install 18 && nvm use 18",
+                    "Or install via apt: apt install -y nodejs npm"
+                ]
+            },
+            "syncthing_connection_failed": {
+                "title": "Syncthing Connection Failed",
+                "symptoms": ["Cannot connect to Syncthing", "Port 8385 not accessible"],
+                "solutions": [
+                    "Check if Syncthing is running: systemctl status syncthing@media-pipeline",
+                    "Start Syncthing: systemctl start syncthing@media-pipeline",
+                    "Check firewall: ufw status",
+                    "Verify port: netstat -tlnp | grep 8385"
+                ]
+            },
+            "database_corrupted": {
+                "title": "Database Issues",
+                "symptoms": ["Database locked", "SQLite errors", "Cannot read database"],
+                "solutions": [
+                    "Check database permissions: ls -la /opt/media-pipeline/media.db",
+                    "Repair database: sqlite3 /opt/media-pipeline/media.db '.recover'",
+                    "Backup and recreate: cp media.db media.db.backup && rm media.db"
+                ]
+            },
+            "disk_space_low": {
+                "title": "Low Disk Space",
+                "symptoms": ["Disk usage > 90%", "Cannot write files", "Out of space errors"],
+                "solutions": [
+                    "Check disk usage: df -h",
+                    "Clean old logs: find /var/log -name '*.log' -mtime +7 -delete",
+                    "Clean package cache: apt clean",
+                    "Remove old media files if safe to do so"
+                ]
+            },
+            "memory_high": {
+                "title": "High Memory Usage",
+                "symptoms": ["Memory usage > 90%", "System slow", "Out of memory errors"],
+                "solutions": [
+                    "Check memory usage: free -h",
+                    "Restart services: pm2 restart all",
+                    "Check for memory leaks in logs",
+                    "Consider increasing container memory"
+                ]
+            }
+        }
     
     def check_systemctl_service(self, service_name):
         """Check if a systemd service is active"""
@@ -253,16 +309,216 @@ class ServiceStatusChecker:
         except Exception as e:
             return f"Error getting logs: {str(e)}"
     
+    def get_detailed_system_info(self):
+        """Get detailed system information using psutil"""
+        try:
+            # CPU information
+            cpu_percent = psutil.cpu_percent(interval=1)
+            cpu_count = psutil.cpu_count()
+            
+            # Memory information
+            memory = psutil.virtual_memory()
+            swap = psutil.swap_memory()
+            
+            # Disk information
+            disk = psutil.disk_usage('/')
+            
+            # Network information
+            network = psutil.net_io_counters()
+            
+            # Load average
+            load_avg = os.getloadavg() if hasattr(os, 'getloadavg') else [0, 0, 0]
+            
+            return {
+                "cpu": {
+                    "percent": cpu_percent,
+                    "count": cpu_count,
+                    "load_avg": load_avg
+                },
+                "memory": {
+                    "total": memory.total,
+                    "available": memory.available,
+                    "used": memory.used,
+                    "percent": memory.percent,
+                    "swap_total": swap.total,
+                    "swap_used": swap.used,
+                    "swap_percent": swap.percent
+                },
+                "disk": {
+                    "total": disk.total,
+                    "used": disk.used,
+                    "free": disk.free,
+                    "percent": (disk.used / disk.total) * 100
+                },
+                "network": {
+                    "bytes_sent": network.bytes_sent,
+                    "bytes_recv": network.bytes_recv,
+                    "packets_sent": network.packets_sent,
+                    "packets_recv": network.packets_recv
+                }
+            }
+        except Exception as e:
+            return {"error": str(e)}
+    
+    def get_database_stats(self):
+        """Get database statistics and health"""
+        try:
+            if not os.path.exists(self.db_path):
+                return {"error": "Database file not found"}
+            
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Get table information
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            tables = [row[0] for row in cursor.fetchall()]
+            
+            table_stats = {}
+            total_records = 0
+            
+            for table in tables:
+                cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                count = cursor.fetchone()[0]
+                table_stats[table] = count
+                total_records += count
+            
+            # Get database size
+            db_size = os.path.getsize(self.db_path)
+            
+            # Check for recent activity (last 24 hours)
+            recent_activity = 0
+            try:
+                cursor.execute("SELECT COUNT(*) FROM media_files WHERE created_at > datetime('now', '-1 day')")
+                recent_activity = cursor.fetchone()[0]
+            except:
+                pass
+            
+            conn.close()
+            
+            return {
+                "tables": table_stats,
+                "total_records": total_records,
+                "database_size": db_size,
+                "recent_activity_24h": recent_activity,
+                "health": "good" if total_records > 0 else "empty"
+            }
+        except Exception as e:
+            return {"error": str(e)}
+    
+    def get_pm2_status(self):
+        """Get PM2 process status"""
+        try:
+            result = subprocess.run(
+                ["pm2", "jlist"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                pm2_data = json.loads(result.stdout)
+                return {
+                    "status": "running",
+                    "processes": pm2_data
+                }
+            else:
+                return {"status": "error", "message": result.stderr}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+    
+    def get_network_connectivity(self):
+        """Test network connectivity to external services"""
+        connectivity_tests = {
+            "google_dns": {"host": "8.8.8.8", "port": 53, "status": False},
+            "cloudflare_dns": {"host": "1.1.1.1", "port": 53, "status": False},
+            "nodesource": {"host": "deb.nodesource.com", "port": 443, "status": False},
+            "syncthing_apt": {"host": "apt.syncthing.net", "port": 443, "status": False}
+        }
+        
+        for test_name, test_info in connectivity_tests.items():
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(3)
+                result = sock.connect_ex((test_info["host"], test_info["port"]))
+                connectivity_tests[test_name]["status"] = result == 0
+                sock.close()
+            except:
+                connectivity_tests[test_name]["status"] = False
+        
+        return connectivity_tests
+    
+    def detect_issues(self, status_data):
+        """Detect potential issues and provide troubleshooting suggestions"""
+        issues = []
+        
+        # Check disk space
+        if "system" in status_data and "disk_usage" in status_data["system"]:
+            disk_usage = status_data["system"]["disk_usage"]
+            if disk_usage and "%" in disk_usage:
+                usage_percent = int(disk_usage.replace("%", ""))
+                if usage_percent > 90:
+                    issues.append({
+                        "type": "disk_space_low",
+                        "severity": "high",
+                        "message": f"Disk usage is {usage_percent}%",
+                        "guide": self.troubleshooting_guides["disk_space_low"]
+                    })
+        
+        # Check memory usage
+        if "detailed_system" in status_data:
+            memory_percent = status_data["detailed_system"].get("memory", {}).get("percent", 0)
+            if memory_percent > 90:
+                issues.append({
+                    "type": "memory_high",
+                    "severity": "high",
+                    "message": f"Memory usage is {memory_percent}%",
+                    "guide": self.troubleshooting_guides["memory_high"]
+                })
+        
+        # Check Node.js availability
+        if not self.check_process_running("node") and not self.check_process_running("npm"):
+            issues.append({
+                "type": "nodejs_not_found",
+                "severity": "critical",
+                "message": "Node.js/NPM not found",
+                "guide": self.troubleshooting_guides["nodejs_not_found"]
+            })
+        
+        # Check database health
+        db_stats = self.get_database_stats()
+        if "error" in db_stats:
+            issues.append({
+                "type": "database_corrupted",
+                "severity": "high",
+                "message": f"Database error: {db_stats['error']}",
+                "guide": self.troubleshooting_guides["database_corrupted"]
+            })
+        
+        # Check Syncthing connectivity
+        if not self.check_port_listening(8385):
+            issues.append({
+                "type": "syncthing_connection_failed",
+                "severity": "medium",
+                "message": "Syncthing not accessible on port 8385",
+                "guide": self.troubleshooting_guides["syncthing_connection_failed"]
+            })
+        
+        return issues
+    
     def get_all_status(self):
         """Get comprehensive status of all services and components"""
         status = {
             "timestamp": datetime.now().isoformat(),
             "system": self.get_system_info(),
+            "detailed_system": self.get_detailed_system_info(),
             "services": {},
             "ports": {},
             "processes": {},
             "files": {},
-            "logs": {}
+            "logs": {},
+            "database": self.get_database_stats(),
+            "pm2": self.get_pm2_status(),
+            "network_connectivity": self.get_network_connectivity(),
+            "issues": []
         }
         
         # Check systemd services
@@ -278,7 +534,7 @@ class ServiceStatusChecker:
             status["logs"][service] = self.get_service_logs(service, 5)
         
         # Check ports
-        ports_to_check = [8080, 8081, 8384]
+        ports_to_check = [8080, 8081, 8082, 8083, 8084, 8384, 8385, 9615]
         for port in ports_to_check:
             status["ports"][f"port_{port}"] = {
                 "listening": self.check_port_listening(port),
@@ -286,7 +542,7 @@ class ServiceStatusChecker:
             }
         
         # Check processes
-        processes_to_check = ["python", "syncthing", "nginx"]
+        processes_to_check = ["python", "syncthing", "nginx", "node", "pm2"]
         for process in processes_to_check:
             status["processes"][process] = {
                 "running": self.check_process_running(process)
@@ -297,6 +553,7 @@ class ServiceStatusChecker:
             "/opt/media-pipeline/.env",
             "/opt/media-pipeline/config.yaml",
             "/opt/media-pipeline/media.db",
+            "/opt/media-pipeline/ecosystem.config.js",
             "/var/log/media-pipeline/media_pipeline.log"
         ]
         
@@ -306,6 +563,9 @@ class ServiceStatusChecker:
                 "readable": os.access(file_path, os.R_OK) if os.path.exists(file_path) else False,
                 "size": os.path.getsize(file_path) if os.path.exists(file_path) else 0
             }
+        
+        # Detect issues
+        status["issues"] = self.detect_issues(status)
         
         return status
 
@@ -385,6 +645,123 @@ def stop_service(service_name):
             "success": result.returncode == 0,
             "output": result.stdout,
             "error": result.stderr
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        })
+
+@app.route('/api/logs/<log_type>')
+def get_logs(log_type):
+    """API endpoint to get various types of logs"""
+    lines = request.args.get('lines', 50, type=int)
+    
+    log_files = {
+        'system': '/var/log/syslog',
+        'nginx': '/var/log/nginx/error.log',
+        'media_pipeline': '/var/log/media-pipeline/media_pipeline.log',
+        'pm2': '/var/log/media-pipeline/pm2.log',
+        'syncthing': '/var/log/media-pipeline/syncthing.log'
+    }
+    
+    if log_type not in log_files:
+        return jsonify({"error": "Invalid log type"})
+    
+    log_file = log_files[log_type]
+    if not os.path.exists(log_file):
+        return jsonify({"error": "Log file not found"})
+    
+    try:
+        result = subprocess.run(
+            ["tail", "-n", str(lines), log_file],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        return jsonify({
+            "logs": result.stdout,
+            "file": log_file,
+            "lines": lines
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+@app.route('/api/execute_command', methods=['POST'])
+def execute_command():
+    """API endpoint to execute system commands (with restrictions)"""
+    data = request.get_json()
+    command = data.get('command', '')
+    
+    # Whitelist of safe commands
+    allowed_commands = [
+        'df -h',
+        'free -h',
+        'uptime',
+        'ps aux',
+        'netstat -tlnp',
+        'systemctl status',
+        'pm2 status',
+        'pm2 logs',
+        'pm2 restart all',
+        'pm2 stop all',
+        'pm2 start all'
+    ]
+    
+    if command not in allowed_commands:
+        return jsonify({"error": "Command not allowed"})
+    
+    try:
+        result = subprocess.run(
+            command.split(),
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        return jsonify({
+            "success": result.returncode == 0,
+            "output": result.stdout,
+            "error": result.stderr,
+            "command": command
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "command": command
+        })
+
+@app.route('/api/troubleshooting/<issue_type>')
+def get_troubleshooting_guide(issue_type):
+    """API endpoint to get troubleshooting guide for specific issue"""
+    if issue_type in status_checker.troubleshooting_guides:
+        return jsonify(status_checker.troubleshooting_guides[issue_type])
+    else:
+        return jsonify({"error": "Troubleshooting guide not found"})
+
+@app.route('/api/database/query', methods=['POST'])
+def execute_database_query():
+    """API endpoint to execute database queries"""
+    data = request.get_json()
+    query = data.get('query', '')
+    
+    # Only allow SELECT queries for safety
+    if not query.strip().upper().startswith('SELECT'):
+        return jsonify({"error": "Only SELECT queries are allowed"})
+    
+    try:
+        conn = sqlite3.connect(status_checker.db_path)
+        cursor = conn.cursor()
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        columns = [description[0] for description in cursor.description]
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "columns": columns,
+            "rows": rows,
+            "count": len(rows)
         })
     except Exception as e:
         return jsonify({
@@ -630,4 +1007,6 @@ if __name__ == '__main__':
     print("Press Ctrl+C to stop")
     
     # Run the Flask app
-    socketio.run(app, host='0.0.0.0', port=8082, debug=False)
+    # Check for PORT environment variable (PM2 override)
+    port = int(os.environ.get('PORT', 8082))
+    socketio.run(app, host='0.0.0.0', port=port, debug=False)

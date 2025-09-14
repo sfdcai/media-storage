@@ -388,14 +388,18 @@ if __name__ == '__main__':
     host = '127.0.0.1'
     port = 8080
     
-    # Try to get web UI specific config
-    try:
-        config_data = config_manager._config_data
-        web_ui_config = config_data.get('web_ui', {})
-        host = web_ui_config.get('host', host)
-        port = web_ui_config.get('port', port)
-    except:
-        pass
+    # Check for PORT environment variable first (PM2 override)
+    if 'PORT' in os.environ:
+        port = int(os.environ['PORT'])
+    else:
+        # Try to get web UI specific config
+        try:
+            config_data = config_manager._config_data
+            web_ui_config = config_data.get('web_ui', {})
+            host = web_ui_config.get('host', host)
+            port = web_ui_config.get('port', port)
+        except:
+            pass
     
     logger.info(f"Starting Media Pipeline Web UI on {host}:{port}")
     socketio.run(app, host=host, port=port, debug=False)

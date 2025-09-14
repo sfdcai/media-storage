@@ -485,4 +485,6 @@ if __name__ == '__main__':
     print("Press Ctrl+C to stop")
     
     # Run the Flask app
-    socketio.run(app, host='0.0.0.0', port=8083, debug=False)
+    # Check for PORT environment variable (PM2 override)
+    port = int(os.environ.get('PORT', 8083))
+    socketio.run(app, host='0.0.0.0', port=port, debug=False)
