@@ -185,7 +185,19 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}=== Step 5: Create Required Directories ===${NC}"
+echo -e "${BLUE}=== Step 5: Create Service User ===${NC}"
+
+# Create service user if it doesn't exist
+if ! id "$SERVICE_USER" &>/dev/null; then
+    echo -e "${GREEN}Creating service user: $SERVICE_USER${NC}"
+    useradd -r -s /bin/false -d "$PROJECT_DIR" "$SERVICE_USER"
+    echo -e "${GREEN}✓ Service user created${NC}"
+else
+    echo -e "${GREEN}✓ Service user already exists${NC}"
+fi
+
+echo ""
+echo -e "${BLUE}=== Step 6: Create Required Directories ===${NC}"
 
 # Create required directories
 DIRS_TO_CREATE=()
@@ -219,7 +231,7 @@ chown -R "$SERVICE_USER:$SERVICE_USER" /mnt/wd_all_pictures 2>/dev/null || true
 chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR" 2>/dev/null || true
 
 echo ""
-echo -e "${BLUE}=== Step 6: Copy Application Files ===${NC}"
+echo -e "${BLUE}=== Step 7: Copy Application Files ===${NC}"
 
 # Copy application files to project directory
 FILES_COPIED=0
@@ -283,7 +295,7 @@ if [ $FILES_COPIED -eq 0 ]; then
     echo -e "${GREEN}✓ All application files already up to date${NC}"
 fi
 
-echo -e "${BLUE}=== Step 7: Configure Nginx ===${NC}"
+echo -e "${BLUE}=== Step 8: Configure Nginx ===${NC}"
 
 # Check if nginx configuration needs updating
 NGINX_CONFIG_UPDATED=0
@@ -350,7 +362,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}=== Step 8: Create Environment File ===${NC}"
+echo -e "${BLUE}=== Step 9: Create Environment File ===${NC}"
 
 # Create .env file only if it doesn't exist
 if [ ! -f "$PROJECT_DIR/.env" ]; then
@@ -384,7 +396,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}=== Step 9: Start PM2 Applications ===${NC}"
+echo -e "${BLUE}=== Step 10: Start PM2 Applications ===${NC}"
 
 # Check if PM2 is already running applications
 if pm2 list | grep -q "online"; then
@@ -407,7 +419,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}=== Step 10: Verify Dependencies ===${NC}"
+echo -e "${BLUE}=== Step 11: Verify Dependencies ===${NC}"
 
 # Verify all critical dependencies
 echo -e "${GREEN}Verifying dependencies...${NC}"
@@ -468,7 +480,7 @@ else
 fi
 
 echo ""
-echo -e "${BLUE}=== Step 11: Verify Services ===${NC}"
+echo -e "${BLUE}=== Step 12: Verify Services ===${NC}"
 
 # Wait for services to start
 sleep 5
