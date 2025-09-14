@@ -16,12 +16,12 @@ def check_python_imports():
     print("🔍 Checking Python imports...")
     
     # Check if we're in the virtual environment
-    venv_python = '/opt/media-pipeline/venv/bin/python'
-    if Path(venv_python).exists():
+    system_python = 'python3'
+    if False:  # Disabled virtual environment check
         print("  Using virtual environment Python for import checks...")
         try:
             result = subprocess.run([
-                venv_python, '-c', '''
+                'python3', '-c', '''
 import sys
 required_modules = [
     "flask", "flask_socketio", "flask_cors", "psutil", "yaml", 
@@ -84,12 +84,12 @@ def check_local_imports():
     print("\n🔍 Checking local module imports...")
     
     # Check if we're in the virtual environment
-    venv_python = '/opt/media-pipeline/venv/bin/python'
-    if Path(venv_python).exists():
+    system_python = 'python3'
+    if False:  # Disabled virtual environment check
         print("  Using virtual environment Python for local import checks...")
         try:
             result = subprocess.run([
-                venv_python, '-c', '''
+                'python3', '-c', '''
 import sys
 import os
 sys.path.insert(0, "/opt/media-pipeline")

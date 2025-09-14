@@ -3,7 +3,7 @@ module.exports = {
     {
       name: 'web-ui',
       script: 'web_ui.py',
-      interpreter: '/opt/media-pipeline/venv/bin/python',
+      interpreter: 'python3',
       cwd: '/opt/media-pipeline',
       user: 'media-pipeline',
       instances: 1,
@@ -22,7 +22,7 @@ module.exports = {
     {
       name: 'pipeline-dashboard',
       script: 'web_ui.py',
-      interpreter: '/opt/media-pipeline/venv/bin/python',
+      interpreter: 'python3',
       cwd: '/opt/media-pipeline',
       user: 'media-pipeline',
       instances: 1,
@@ -41,7 +41,7 @@ module.exports = {
     {
       name: 'status-dashboard',
       script: 'web_status_dashboard.py',
-      interpreter: '/opt/media-pipeline/venv/bin/python',
+      interpreter: 'python3',
       cwd: '/opt/media-pipeline',
       user: 'media-pipeline',
       instances: 1,
@@ -60,7 +60,7 @@ module.exports = {
     {
       name: 'config-interface',
       script: 'web_config_interface.py',
-      interpreter: '/opt/media-pipeline/venv/bin/python',
+      interpreter: 'python3',
       cwd: '/opt/media-pipeline',
       user: 'media-pipeline',
       instances: 1,
@@ -79,7 +79,7 @@ module.exports = {
     {
       name: 'db-viewer',
       script: 'db_viewer.py',
-      interpreter: '/opt/media-pipeline/venv/bin/python',
+      interpreter: 'python3',
       cwd: '/opt/media-pipeline',
       user: 'media-pipeline',
       instances: 1,

@@ -35,7 +35,7 @@ def fix_python_dependencies():
     # Install from requirements.txt
     if Path('requirements.txt').exists():
         success = run_command(
-            '/opt/media-pipeline/venv/bin/pip install -r requirements.txt --upgrade',
+            'pip3 install -r requirements.txt --upgrade',
             'Installing Python packages from requirements.txt'
         )
     else:
@@ -56,7 +56,7 @@ def fix_python_dependencies():
         
         for package in packages:
             run_command(
-                f'/opt/media-pipeline/venv/bin/pip install {package}',
+                f'pip3 install {package}',
                 f'Installing {package}'
             )
     
@@ -119,7 +119,7 @@ def fix_database():
     # Always run database initialization to ensure tables exist
     if Path('/opt/media-pipeline/init_database.py').exists():
         run_command(
-            'cd /opt/media-pipeline && /opt/media-pipeline/venv/bin/python init_database.py',
+            'cd /opt/media-pipeline && python3 init_database.py',
             'Initializing database tables'
         )
     else:
@@ -233,7 +233,7 @@ def main():
         print("\n🔧 Starting PM2 dashboard...")
         if Path('/opt/media-pipeline/start_pm2_dashboard.py').exists():
             return run_command(
-                'cd /opt/media-pipeline && /opt/media-pipeline/venv/bin/python start_pm2_dashboard.py',
+                'cd /opt/media-pipeline && python3 start_pm2_dashboard.py',
                 'Starting PM2 dashboard'
             )
         else:

@@ -160,36 +160,19 @@ echo -e "${GREEN}✓ Syncthing installed${NC}"
 fi
 
 echo ""
-echo -e "${BLUE}=== Step 4: Setup Python Virtual Environment ===${NC}"
+echo -e "${BLUE}=== Step 4: Install Python Dependencies ===${NC}"
 
-# Check if virtual environment already exists
-if dir_exists "$PROJECT_DIR/venv"; then
-    echo -e "${GREEN}✓ Python virtual environment already exists${NC}"
-    
-    # Check if requirements.txt exists and install from it
-    if [ -f "requirements.txt" ]; then
-        echo -e "${GREEN}Installing Python packages from requirements.txt...${NC}"
-        "$PROJECT_DIR/venv/bin/pip" install -r requirements.txt
-        echo -e "${GREEN}✓ Python packages installed from requirements.txt${NC}"
-    else
-        # Fallback to basic packages if requirements.txt not found
-        echo -e "${GREEN}Installing basic Python packages...${NC}"
-        "$PROJECT_DIR/venv/bin/pip" install flask flask-socketio requests pyicloud psutil
-        echo -e "${GREEN}✓ Basic Python packages installed${NC}"
-    fi
+# Install Python packages globally for simplicity
+echo -e "${GREEN}Installing Python packages globally...${NC}"
+if [ -f "requirements.txt" ]; then
+    echo -e "${GREEN}Installing Python packages from requirements.txt...${NC}"
+    pip3 install -r requirements.txt
+    echo -e "${GREEN}✓ Python packages installed from requirements.txt${NC}"
 else
-echo -e "${GREEN}Creating Python virtual environment...${NC}"
-python3 -m venv "$PROJECT_DIR/venv"
-
-# Install Python packages
-    if [ -f "requirements.txt" ]; then
-        echo -e "${GREEN}Installing Python packages from requirements.txt...${NC}"
-        "$PROJECT_DIR/venv/bin/pip" install -r requirements.txt
-    else
-        echo -e "${GREEN}Installing basic Python packages...${NC}"
-        "$PROJECT_DIR/venv/bin/pip" install flask flask-socketio requests pyicloud psutil
-    fi
-echo -e "${GREEN}✓ Python virtual environment created${NC}"
+    # Fallback to basic packages if requirements.txt not found
+    echo -e "${GREEN}Installing basic Python packages...${NC}"
+    pip3 install flask flask-socketio requests pyicloud psutil
+    echo -e "${GREEN}✓ Basic Python packages installed${NC}"
 fi
 
 echo ""
@@ -504,9 +487,9 @@ echo -e "${BLUE}=== Step 10: Start PM2 Applications ===${NC}"
 # Ensure all Python dependencies are installed
 echo -e "${GREEN}Ensuring all Python dependencies are installed...${NC}"
 if [ -f "$PROJECT_DIR/requirements.txt" ]; then
-    "$PROJECT_DIR/venv/bin/pip" install -r "$PROJECT_DIR/requirements.txt" --upgrade
+    pip3 install -r "$PROJECT_DIR/requirements.txt" --upgrade
 else
-    "$PROJECT_DIR/venv/bin/pip" install psutil pyicloud --upgrade
+    pip3 install psutil pyicloud --upgrade
 fi
 
 # Check if PM2 is already running applications
@@ -653,8 +636,8 @@ echo -e "${YELLOW}Syncthing:${NC} http://$CONTAINER_IP/syncthing/"
 echo -e "${YELLOW}PM2 Dashboard:${NC} http://$CONTAINER_IP/pm2/"
 echo ""
 echo -e "${BLUE}CLI Commands:${NC}"
-echo -e "${YELLOW}Test iCloud:${NC} /opt/media-pipeline/venv/bin/icloudpd --username YOUR_EMAIL --directory /mnt/wd_all_pictures/incoming --download-only --recent 5"
-echo -e "${YELLOW}Run Pipeline:${NC} cd /opt/media-pipeline && source .env && /opt/media-pipeline/venv/bin/python pipeline_orchestrator.py"
+echo -e "${YELLOW}Test iCloud:${NC} icloudpd --username YOUR_EMAIL --directory /mnt/wd_all_pictures/incoming --download-only --recent 5"
+echo -e "${YELLOW}Run Pipeline:${NC} cd /opt/media-pipeline && python3 pipeline_orchestrator.py"
 echo -e "${YELLOW}View Database:${NC} sqlite3 /opt/media-pipeline/media.db"
 echo ""
 echo -e "${BLUE}PM2 Management:${NC}"
@@ -672,7 +655,7 @@ echo -e "${BLUE}=== Final System Verification ===${NC}"
 echo -e "${GREEN}Running system diagnostic...${NC}"
 if [ -f "$PROJECT_DIR/diagnose_system.py" ]; then
     cd "$PROJECT_DIR"
-    "$PROJECT_DIR/venv/bin/python" diagnose_system.py
+    python3 diagnose_system.py
     DIAGNOSTIC_RESULT=$?
     
     if [ $DIAGNOSTIC_RESULT -eq 0 ]; then
@@ -680,7 +663,7 @@ if [ -f "$PROJECT_DIR/diagnose_system.py" ]; then
     else
         echo -e "${YELLOW}⚠️ System diagnostic found issues. Running automatic fix...${NC}"
         if [ -f "$PROJECT_DIR/fix_system.py" ]; then
-            "$PROJECT_DIR/venv/bin/python" fix_system.py
+            python3 fix_system.py
             FIX_RESULT=$?
             if [ $FIX_RESULT -eq 0 ]; then
                 echo -e "${GREEN}✅ System fix completed successfully!${NC}"

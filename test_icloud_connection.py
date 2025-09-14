@@ -11,15 +11,8 @@ from pathlib import Path
 # Add the project directory to Python path
 sys.path.insert(0, '/opt/media-pipeline')
 
-# Ensure we're using the virtual environment
-venv_python = '/opt/media-pipeline/venv/bin/python'
-if os.path.exists(venv_python) and sys.executable != venv_python:
-    print(f"⚠️ Using system Python instead of virtual environment")
-    print(f"Please run: {venv_python} test_icloud_connection.py")
-    print("Or activate the virtual environment first:")
-    print("source /opt/media-pipeline/venv/bin/activate")
-    print("python3 test_icloud_connection.py")
-    sys.exit(1)
+# Using system Python for simplicity
+print(f"🐍 Using Python: {sys.executable}")
 
 def test_icloud_connection():
     """Test iCloud connection and handle 2FA"""

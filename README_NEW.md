@@ -32,7 +32,7 @@ A comprehensive media management and synchronization pipeline for handling photo
    ```bash
    cd /opt/media-pipeline
    source .env
-   /opt/media-pipeline/venv/bin/python pipeline_orchestrator.py
+   python3 pipeline_orchestrator.py
    ```
 
 ## 🌐 Web Interfaces
@@ -83,7 +83,7 @@ pm2 save
 # Test the pipeline
 cd /opt/media-pipeline
 source .env
-/opt/media-pipeline/venv/bin/python test_pipeline.py
+python3 test_pipeline.py
 
 # Run the full pipeline
 /opt/media-pipeline/venv/bin/python pipeline_orchestrator.py
@@ -154,7 +154,7 @@ The system uses SQLite to track:
 
 3. **Test connections:**
    ```bash
-   /opt/media-pipeline/venv/bin/python test_pipeline.py
+   python3 test_pipeline.py
    ```
 
 4. **Check database:**
