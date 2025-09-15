@@ -11,7 +11,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
 
-from config import Config
+from config_loader import Config
 from logger import setup_logger
 from file_manager import FileManager
 from workflow_tracker import WorkflowTracker

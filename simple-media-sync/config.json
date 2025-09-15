@@ -1,0 +1,63 @@
+{
+  "supabase": {
+    "url": "",
+    "key": "",
+    "table_name": "media_files"
+  },
+  "sync": {
+    "source_dirs": [],
+    "exclude_patterns": [".DS_Store", "Thumbs.db", "*.tmp"]
+  },
+  "icloud": {
+    "username": "",
+    "password": "",
+    "download_dir": "",
+    "icloudpd_path": "icloudpd"
+  },
+  "nas": {
+    "mount_path": "",
+    "media_folder": "media"
+  },
+  "compression": {
+    "enabled": true,
+    "strategy": "balanced",
+    "compress_images": true,
+    "compress_videos": true,
+    "image_quality": 85,
+    "video_quality": 28,
+    "compress_before_sync": true,
+    "year_criteria": {
+      "enabled": false,
+      "compress_older_than_years": 2,
+      "aggressive_compression_after_years": 5
+    },
+    "custom_settings": {
+      "image_formats": ["jpg", "jpeg", "png", "bmp", "tiff"],
+      "video_formats": ["mp4", "avi", "mov", "wmv", "flv", "webm", "mkv"],
+      "max_file_size_mb": 100,
+      "min_compression_ratio": 0.1
+    }
+  },
+  "pixel_sync": {
+    "enabled": false,
+    "device_path": "",
+    "sync_folder": "DCIM",
+    "delete_after_sync": false
+  },
+  "workflow": {
+    "incoming_folder": "./incoming",
+    "pixel_sync_folder": "./pixel_sync",
+    "nas_archive_folder": "./nas_archive",
+    "processing_folder": "./processing",
+    "icloud_delete_folder": "./icloud_delete",
+    "pixel_batch_size": 5,
+    "sync_timeout_seconds": 300,
+    "cleanup_after_hours": 24
+  },
+  "syncthing": {
+    "api_url": "http://localhost:8384",
+    "api_key": "",
+    "pixel_folder_id": "",
+    "timeout_seconds": 300
+  }
+}

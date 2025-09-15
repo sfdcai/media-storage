@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional
 
-from config import Config
+from config_loader import Config
 from logger import setup_logger
 from workflow_tracker import WorkflowTracker
 
