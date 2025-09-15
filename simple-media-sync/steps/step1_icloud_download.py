@@ -44,9 +44,19 @@ def main():
             tracker.complete_step(1, success=False, error_message=error_msg)
             return False
         
+        # Check if 2FA setup is needed
+        if not config.get('icloud.trusted_device', False):
+            logger.info("2FA authentication not set up. Setting up now...")
+            if not icloud.setup_2fa_authentication():
+                error_msg = "Failed to setup 2FA authentication"
+                logger.error(error_msg)
+                tracker.complete_step(1, success=False, error_message=error_msg)
+                return False
+        
         # Download files from iCloud
-        logger.info("Downloading files from iCloud...")
-        downloaded_files = icloud.download_from_icloud(dry_run=False)
+        interactive_mode = config.get('icloud.interactive_mode', True)
+        logger.info(f"Downloading files from iCloud (interactive: {interactive_mode})...")
+        downloaded_files = icloud.download_from_icloud(dry_run=False, interactive=interactive_mode)
         
         if not downloaded_files:
             logger.info("No new files downloaded from iCloud")

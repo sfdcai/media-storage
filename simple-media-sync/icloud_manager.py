@@ -1,15 +1,17 @@
 """
-iCloud file management utilities
+iCloud file management utilities with 2FA support
 """
 
 import os
 import subprocess
+import time
+import getpass
 from pathlib import Path
 from typing import List, Optional
 
 
 class iCloudManager:
-    """Handle iCloud file operations"""
+    """Handle iCloud file operations with 2FA support"""
     
     def __init__(self, config, logger):
         self.config = config
@@ -18,9 +20,11 @@ class iCloudManager:
         self.icloud_password = config.get('icloud.password', '')
         self.icloud_download_dir = config.get('icloud.download_dir', '')
         self.icloudpd_path = config.get('icloud.icloudpd_path', 'icloudpd')
+        self.trusted_device = config.get('icloud.trusted_device', False)
+        self.cookie_directory = config.get('icloud.cookie_directory', '~/.pyiCloud')
     
-    def download_from_icloud(self, dry_run: bool = False) -> List[str]:
-        """Download files from iCloud using icloudpd"""
+    def download_from_icloud(self, dry_run: bool = False, interactive: bool = True) -> List[str]:
+        """Download files from iCloud using icloudpd with 2FA support"""
         if not self.icloud_username or not self.icloud_download_dir:
             self.logger.error("iCloud credentials or download directory not configured")
             return []
@@ -34,24 +38,43 @@ class iCloudManager:
             return []
         
         try:
-            # Build icloudpd command
+            # Build icloudpd command with 2FA support
             cmd = [
                 self.icloudpd_path,
                 '--username', self.icloud_username,
-                '--password', self.icloud_password,
                 '--directory', self.icloud_download_dir,
                 '--download-only',
-                '--skip-videos'  # Skip videos by default, can be configured
+                '--skip-videos',  # Skip videos by default, can be configured
+                '--auto-delete',  # Auto-delete after download
+                '--folder-structure', 'none'  # Flat structure
             ]
             
+            # Add cookie directory for session persistence
+            if self.cookie_directory:
+                cmd.extend(['--cookie-directory', os.path.expanduser(self.cookie_directory)])
+            
+            # Add password if provided (for non-interactive mode)
+            if self.icloud_password and not interactive:
+                cmd.extend(['--password', self.icloud_password])
+            
             self.logger.info("Downloading files from iCloud...")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if interactive:
+                # Interactive mode - let icloudpd handle 2FA prompts
+                self.logger.info("Running in interactive mode - you may be prompted for 2FA code")
+                result = subprocess.run(cmd, timeout=600)  # 10 minutes timeout for 2FA
+            else:
+                # Non-interactive mode - capture output
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             
             if result.returncode == 0:
                 self.logger.info("iCloud download completed successfully")
                 return self._get_downloaded_files()
             else:
-                self.logger.error(f"iCloud download failed: {result.stderr}")
+                if interactive:
+                    self.logger.error("iCloud download failed - check output above")
+                else:
+                    self.logger.error(f"iCloud download failed: {result.stderr}")
                 return []
                 
         except subprocess.TimeoutExpired:
@@ -118,18 +141,58 @@ class iCloudManager:
         
         return recent_files
     
+    def setup_2fa_authentication(self) -> bool:
+        """Setup 2FA authentication for iCloud"""
+        if not self.icloud_username:
+            self.logger.error("iCloud username not configured")
+            return False
+        
+        try:
+            self.logger.info("Setting up 2FA authentication for iCloud...")
+            self.logger.info("This will prompt you for your password and 2FA code")
+            
+            # First run to trigger 2FA setup
+            cmd = [
+                self.icloudpd_path,
+                '--username', self.icloud_username,
+                '--list-albums',
+                '--cookie-directory', os.path.expanduser(self.cookie_directory)
+            ]
+            
+            self.logger.info("Running initial authentication...")
+            result = subprocess.run(cmd, timeout=300)  # 5 minutes for 2FA setup
+            
+            if result.returncode == 0:
+                self.logger.info("✅ 2FA authentication setup successful")
+                self.trusted_device = True
+                return True
+            else:
+                self.logger.error("❌ 2FA authentication setup failed")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            self.logger.error("2FA setup timed out")
+            return False
+        except Exception as e:
+            self.logger.error(f"Error setting up 2FA: {e}")
+            return False
+    
     def test_icloud_connection(self) -> bool:
         """Test iCloud connection"""
-        if not self.icloud_username or not self.icloud_password:
+        if not self.icloud_username:
             return False
         
         try:
             cmd = [
                 self.icloudpd_path,
                 '--username', self.icloud_username,
-                '--password', self.icloud_password,
-                '--list-albums'
+                '--list-albums',
+                '--cookie-directory', os.path.expanduser(self.cookie_directory)
             ]
+            
+            # Add password only if not using cookies
+            if self.icloud_password and not self.trusted_device:
+                cmd.extend(['--password', self.icloud_password])
             
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             return result.returncode == 0
@@ -143,5 +206,7 @@ class iCloudManager:
             'username_configured': bool(self.icloud_username),
             'password_configured': bool(self.icloud_password),
             'download_dir_configured': bool(self.icloud_download_dir),
+            'trusted_device': self.trusted_device,
+            'cookie_directory': self.cookie_directory,
             'connection_ok': self.test_icloud_connection()
         }

@@ -12,7 +12,10 @@
     "username": "",
     "password": "",
     "download_dir": "",
-    "icloudpd_path": "icloudpd"
+    "icloudpd_path": "icloudpd",
+    "trusted_device": false,
+    "cookie_directory": "~/.pyiCloud",
+    "interactive_mode": true
   },
   "nas": {
     "mount_path": "",

@@ -22,7 +22,10 @@ def setup_config():
             "username": input("iCloud username: ").strip(),
             "password": input("iCloud password: ").strip(),
             "download_dir": input("iCloud download directory: ").strip(),
-            "icloudpd_path": "icloudpd"
+            "icloudpd_path": "icloudpd",
+            "trusted_device": False,
+            "cookie_directory": "~/.pyiCloud",
+            "interactive_mode": True
         },
         "workflow": {
             "incoming_folder": input("Incoming folder (default: ./incoming): ").strip() or "./incoming",

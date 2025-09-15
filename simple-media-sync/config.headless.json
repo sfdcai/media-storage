@@ -8,7 +8,10 @@
     "username": "",
     "password": "",
     "download_dir": "/app/incoming",
-    "icloudpd_path": "icloudpd"
+    "icloudpd_path": "icloudpd",
+    "trusted_device": false,
+    "cookie_directory": "/app/.pyiCloud",
+    "interactive_mode": false
   },
   "workflow": {
     "incoming_folder": "/app/incoming",
