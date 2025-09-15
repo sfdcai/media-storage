@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  media-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile.alpine
+    container_name: media-sync-workflow
+    volumes:
+      - ./config.json:/app/config.json
+      - ./incoming:/app/incoming
+      - ./pixel_sync:/app/pixel_sync
+      - ./nas_archive:/app/nas_archive
+      - ./processing:/app/processing
+      - ./icloud_delete:/app/icloud_delete
+      - ./backups:/app/backups
+      - ./logs:/app/logs
+    environment:
+      - TZ=UTC
+    restart: unless-stopped
+    networks:
+      - media-sync-network
+
+  syncthing:
+    image: syncthing/syncthing:latest
+    container_name: syncthing
+    ports:
+      - "8384:8384"
+      - "22000:22000"
+      - "21027:21027/udp"
+    volumes:
+      - syncthing-config:/var/syncthing/config
+      - syncthing-data:/var/syncthing/data
+      - ./pixel_sync:/var/syncthing/data/pixel_sync
+    environment:
+      - PUID=1000
+      - PGID=1000
+    restart: unless-stopped
+    networks:
+      - media-sync-network
+
+volumes:
+  syncthing-config:
+  syncthing-data:
+
+networks:
+  media-sync-network:
+    driver: bridge
