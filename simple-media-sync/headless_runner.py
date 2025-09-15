@@ -12,6 +12,15 @@ from pathlib import Path
 # Add current directory to path
 sys.path.append('.')
 
+# Check if we're in a virtual environment, if not, try to activate it
+if not hasattr(sys, 'real_prefix') and not (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
+    venv_path = '/opt/media-sync-env'
+    if os.path.exists(venv_path):
+        print(f"Activating virtual environment: {venv_path}")
+        activate_script = os.path.join(venv_path, 'bin', 'activate_this.py')
+        if os.path.exists(activate_script):
+            exec(open(activate_script).read(), {'__file__': activate_script})
+
 from config_loader import Config
 from logger import setup_logger
 from workflow_orchestrator import WorkflowOrchestrator

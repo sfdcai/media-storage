@@ -31,10 +31,14 @@ WORKDIR /app
 
 # Copy requirements and install Python packages
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Create virtual environment and install packages
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Install icloudpd
-RUN pip3 install --no-cache-dir icloudpd
+RUN pip install --no-cache-dir icloudpd
 
 # Copy application files
 COPY . .
