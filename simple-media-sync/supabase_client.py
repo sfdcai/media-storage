@@ -50,15 +50,18 @@ class SupabaseClient:
         except Exception:
             return ""
     
-    def record_file(self, file_path: str, file_size: int, file_hash: str) -> bool:
-        """Record file in database"""
+    def record_file(self, file_path: str, file_size: int, file_hash: str, 
+                   workflow_stage: str = 'completed', compression_metadata: dict = None) -> bool:
+        """Record file in database with workflow stage and compression metadata"""
         try:
             data = {
                 'file_path': file_path,
                 'file_size': file_size,
                 'file_hash': file_hash,
                 'last_modified': datetime.now().isoformat(),
-                'sync_status': 'synced'
+                'sync_status': 'synced',
+                'workflow_stage': workflow_stage,
+                'compression_metadata': compression_metadata or {}
             }
             
             # Check if file already exists
@@ -74,6 +77,53 @@ class SupabaseClient:
             return True
         except Exception as e:
             print(f"Error recording file {file_path}: {e}")
+            return False
+    
+    def update_workflow_stage(self, file_path: str, stage: str, metadata: dict = None) -> bool:
+        """Update workflow stage for a file"""
+        try:
+            data = {
+                'workflow_stage': stage,
+                'last_modified': datetime.now().isoformat()
+            }
+            
+            if metadata:
+                data['compression_metadata'] = metadata
+            
+            self.client.table(self.table_name).update(data).eq('file_path', file_path).execute()
+            return True
+        except Exception as e:
+            print(f"Error updating workflow stage for {file_path}: {e}")
+            return False
+    
+    def record_compression(self, file_path: str, original_size: int, compressed_size: int, 
+                          compression_ratio: float, quality_settings: dict) -> bool:
+        """Record compression metadata for a file"""
+        try:
+            compression_metadata = {
+                'original_size': original_size,
+                'compressed_size': compressed_size,
+                'compression_ratio': compression_ratio,
+                'quality_settings': quality_settings,
+                'compressed_at': datetime.now().isoformat()
+            }
+            
+            # Get existing metadata
+            existing = self.client.table(self.table_name).select('compression_metadata').eq('file_path', file_path).execute()
+            existing_metadata = existing.data[0].get('compression_metadata', {}) if existing.data else {}
+            
+            # Merge with existing metadata
+            existing_metadata.update(compression_metadata)
+            
+            data = {
+                'compression_metadata': existing_metadata,
+                'last_modified': datetime.now().isoformat()
+            }
+            
+            self.client.table(self.table_name).update(data).eq('file_path', file_path).execute()
+            return True
+        except Exception as e:
+            print(f"Error recording compression for {file_path}: {e}")
             return False
     
     def get_synced_files(self) -> List[Dict]:
@@ -99,6 +149,53 @@ class SupabaseClient:
             }
         except Exception:
             return {'files_count': 0, 'last_sync': None}
+    
+    def get_workflow_status(self) -> Dict:
+        """Get workflow status statistics"""
+        try:
+            # Get files by workflow stage
+            stages_result = self.client.table(self.table_name).select('workflow_stage', count='exact').execute()
+            
+            # Get compression statistics
+            compression_result = self.client.table(self.table_name).select('compression_metadata').execute()
+            
+            total_compressed = 0
+            total_size_saved = 0
+            
+            for record in compression_result.data:
+                if record.get('compression_metadata'):
+                    metadata = record['compression_metadata']
+                    if 'original_size' in metadata and 'compressed_size' in metadata:
+                        total_compressed += 1
+                        total_size_saved += metadata['original_size'] - metadata['compressed_size']
+            
+            return {
+                'total_files': stages_result.count or 0,
+                'compressed_files': total_compressed,
+                'total_size_saved_mb': total_size_saved / (1024 * 1024) if total_size_saved > 0 else 0,
+                'workflow_stages': self._get_stage_counts()
+            }
+        except Exception:
+            return {
+                'total_files': 0,
+                'compressed_files': 0,
+                'total_size_saved_mb': 0,
+                'workflow_stages': {}
+            }
+    
+    def _get_stage_counts(self) -> Dict:
+        """Get count of files by workflow stage"""
+        try:
+            result = self.client.table(self.table_name).select('workflow_stage').execute()
+            stage_counts = {}
+            
+            for record in result.data:
+                stage = record.get('workflow_stage', 'unknown')
+                stage_counts[stage] = stage_counts.get(stage, 0) + 1
+            
+            return stage_counts
+        except Exception:
+            return {}
     
     def is_file_synced(self, file_path: str, file_hash: str) -> bool:
         """Check if file is already synced with same hash"""

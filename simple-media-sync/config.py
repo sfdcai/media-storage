@@ -49,9 +49,29 @@ class Config:
             },
             'compression': {
                 'enabled': True,
+                'strategy': 'balanced',  # 'aggressive', 'balanced', 'conservative', 'custom'
+                'compress_images': True,
+                'compress_videos': True,
                 'image_quality': 85,
                 'video_quality': 28,
-                'compress_before_sync': True
+                'compress_before_sync': True,
+                'year_criteria': {
+                    'enabled': False,
+                    'compress_older_than_years': 2,
+                    'aggressive_compression_after_years': 5
+                },
+                'custom_settings': {
+                    'image_formats': ['jpg', 'jpeg', 'png', 'bmp', 'tiff'],
+                    'video_formats': ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'],
+                    'max_file_size_mb': 100,  # Only compress files larger than this
+                    'min_compression_ratio': 0.1  # Minimum 10% size reduction to keep compressed version
+                }
+            },
+            'pixel_sync': {
+                'enabled': False,
+                'device_path': '',  # Path to mounted Pixel device
+                'sync_folder': 'DCIM',
+                'delete_after_sync': False
             }
         }
     
@@ -98,6 +118,73 @@ class Config:
         compress_enabled = input("Enable compression? (y/n, default: y): ").strip().lower()
         self.config['compression']['enabled'] = compress_enabled != 'n'
         
+        if self.config['compression']['enabled']:
+            print("\nCompression Strategy Options:")
+            print("1. Aggressive - Maximum compression, lower quality")
+            print("2. Balanced - Good compression with reasonable quality (default)")
+            print("3. Conservative - Minimal compression, high quality")
+            print("4. Custom - Configure your own settings")
+            
+            strategy_choice = input("Choose compression strategy (1-4, default: 2): ").strip()
+            strategies = {'1': 'aggressive', '2': 'balanced', '3': 'conservative', '4': 'custom'}
+            self.config['compression']['strategy'] = strategies.get(strategy_choice, 'balanced')
+            
+            # Configure what to compress
+            compress_images = input("Compress images? (y/n, default: y): ").strip().lower()
+            self.config['compression']['compress_images'] = compress_images != 'n'
+            
+            compress_videos = input("Compress videos? (y/n, default: y): ").strip().lower()
+            self.config['compression']['compress_videos'] = compress_videos != 'n'
+            
+            # Year-based criteria
+            year_criteria = input("Enable year-based compression criteria? (y/n, default: n): ").strip().lower()
+            self.config['compression']['year_criteria']['enabled'] = year_criteria == 'y'
+            
+            if self.config['compression']['year_criteria']['enabled']:
+                older_years = input("Compress files older than how many years? (default: 2): ").strip()
+                try:
+                    self.config['compression']['year_criteria']['compress_older_than_years'] = int(older_years) if older_years else 2
+                except ValueError:
+                    self.config['compression']['year_criteria']['compress_older_than_years'] = 2
+                
+                aggressive_years = input("Use aggressive compression for files older than how many years? (default: 5): ").strip()
+                try:
+                    self.config['compression']['year_criteria']['aggressive_compression_after_years'] = int(aggressive_years) if aggressive_years else 5
+                except ValueError:
+                    self.config['compression']['year_criteria']['aggressive_compression_after_years'] = 5
+            
+            # Custom settings for advanced users
+            if self.config['compression']['strategy'] == 'custom':
+                print("\nCustom Compression Settings:")
+                image_quality = input("Image quality (1-100, default: 85): ").strip()
+                try:
+                    self.config['compression']['image_quality'] = int(image_quality) if image_quality else 85
+                except ValueError:
+                    self.config['compression']['image_quality'] = 85
+                
+                video_quality = input("Video quality/CRF (0-51, lower=better quality, default: 28): ").strip()
+                try:
+                    self.config['compression']['video_quality'] = int(video_quality) if video_quality else 28
+                except ValueError:
+                    self.config['compression']['video_quality'] = 28
+                
+                max_size = input("Only compress files larger than (MB, default: 100): ").strip()
+                try:
+                    self.config['compression']['custom_settings']['max_file_size_mb'] = int(max_size) if max_size else 100
+                except ValueError:
+                    self.config['compression']['custom_settings']['max_file_size_mb'] = 100
+        
+        # Pixel sync configuration
+        print("\n6. Google Pixel Sync (optional):")
+        pixel_enabled = input("Enable Pixel device sync? (y/n, default: n): ").strip().lower()
+        self.config['pixel_sync']['enabled'] = pixel_enabled == 'y'
+        
+        if self.config['pixel_sync']['enabled']:
+            self.config['pixel_sync']['device_path'] = input("Pixel device mount path: ").strip()
+            self.config['pixel_sync']['sync_folder'] = input("Sync folder on Pixel (default: DCIM): ").strip() or "DCIM"
+            delete_after = input("Delete files from Pixel after sync? (y/n, default: n): ").strip().lower()
+            self.config['pixel_sync']['delete_after_sync'] = delete_after == 'y'
+        
         self.save_config()
         print(f"\nConfiguration saved to {self.config_file}")
     
@@ -109,6 +196,28 @@ class Config:
         print(f"Supabase Key: {'*' * len(self.config['supabase']['key']) if self.config['supabase']['key'] else 'Not set'}")
         print(f"Source directories: {self.config['sync']['source_dirs']}")
         print(f"iCloud username: {self.config['icloud']['username'] or 'Not set'}")
+        print(f"NAS mount path: {self.config['nas']['mount_path'] or 'Not set'}")
+        
+        # Compression settings
+        print(f"\nCompression Settings:")
+        print(f"  Enabled: {self.config['compression']['enabled']}")
+        if self.config['compression']['enabled']:
+            print(f"  Strategy: {self.config['compression']['strategy']}")
+            print(f"  Compress images: {self.config['compression']['compress_images']}")
+            print(f"  Compress videos: {self.config['compression']['compress_videos']}")
+            print(f"  Image quality: {self.config['compression']['image_quality']}")
+            print(f"  Video quality: {self.config['compression']['video_quality']}")
+            if self.config['compression']['year_criteria']['enabled']:
+                print(f"  Year criteria: Enabled (>{self.config['compression']['year_criteria']['compress_older_than_years']} years)")
+                print(f"  Aggressive after: {self.config['compression']['year_criteria']['aggressive_compression_after_years']} years")
+        
+        # Pixel sync settings
+        print(f"\nPixel Sync Settings:")
+        print(f"  Enabled: {self.config['pixel_sync']['enabled']}")
+        if self.config['pixel_sync']['enabled']:
+            print(f"  Device path: {self.config['pixel_sync']['device_path'] or 'Not set'}")
+            print(f"  Sync folder: {self.config['pixel_sync']['sync_folder']}")
+            print(f"  Delete after sync: {self.config['pixel_sync']['delete_after_sync']}")
     
     def get(self, key_path, default=None):
         """Get configuration value using dot notation (e.g., 'supabase.url')"""
