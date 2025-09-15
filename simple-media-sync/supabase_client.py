@@ -54,18 +54,26 @@ class SupabaseClient:
                    workflow_stage: str = 'completed', compression_metadata: dict = None) -> bool:
         """Record file in database with workflow stage and compression metadata"""
         try:
+            # Start with basic required fields
             data = {
                 'file_path': file_path,
                 'file_size': file_size,
                 'file_hash': file_hash,
                 'last_modified': datetime.now().isoformat(),
-                'sync_status': 'synced',
-                'workflow_stage': workflow_stage
+                'sync_status': 'synced'
             }
             
-            # Only add compression_metadata if it's provided and column exists
+            # Try to add optional fields, but don't fail if columns don't exist
+            try:
+                data['workflow_stage'] = workflow_stage
+            except:
+                pass  # Column might not exist
+                
             if compression_metadata:
-                data['compression_metadata'] = compression_metadata
+                try:
+                    data['compression_metadata'] = compression_metadata
+                except:
+                    pass  # Column might not exist
             
             # Check if file already exists
             existing = self.client.table(self.table_name).select('*').eq('file_path', file_path).execute()

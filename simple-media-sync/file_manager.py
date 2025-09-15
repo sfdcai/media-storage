@@ -39,8 +39,14 @@ class FileManager:
         ]
         
         for folder in folders:
-            folder.mkdir(parents=True, exist_ok=True)
-            self.logger.debug(f"Ensured folder exists: {folder}")
+            try:
+                folder.mkdir(parents=True, exist_ok=True)
+                self.logger.debug(f"Ensured folder exists: {folder}")
+            except PermissionError:
+                self.logger.warning(f"Permission denied creating folder: {folder}")
+                self.logger.info(f"Please run: sudo mkdir -p {folder} && sudo chown -R syncthing:syncthing {folder}")
+            except Exception as e:
+                self.logger.error(f"Error creating folder {folder}: {e}")
     
     def add_workflow_prefix(self, file_path: Path, stage: str, step_number: int) -> Path:
         """Add workflow prefix to filename"""

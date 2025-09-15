@@ -40,7 +40,7 @@ class iCloudManager:
                 '--username', self.icloud_username,
                 '--directory', self.icloud_download_dir,
                 '--folder-structure', 'none',
-                '--recent', '30',
+                '--recent', '7',  # Only last 7 days to limit files
                 '--skip-videos'
             ]
             

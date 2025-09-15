@@ -46,7 +46,7 @@
   },
   "workflow": {
     "incoming_folder": "./incoming",
-    "pixel_sync_folder": "./pixel_sync",
+    "pixel_sync_folder": "/var/lib/syncthing/pixel_sync",
     "nas_archive_folder": "./nas_archive",
     "processing_folder": "./processing",
     "icloud_delete_folder": "./icloud_delete",
