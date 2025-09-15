@@ -19,11 +19,28 @@ class Config:
         if self.config_file.exists():
             try:
                 with open(self.config_file, 'r') as f:
-                    return json.load(f)
+                    config = json.load(f)
+                # Ensure all required sections exist
+                return self._ensure_config_sections(config)
             except Exception:
                 return self.get_default_config()
         else:
             return self.get_default_config()
+    
+    def _ensure_config_sections(self, config):
+        """Ensure all required configuration sections exist"""
+        default_config = self.get_default_config()
+        
+        # Merge with defaults to ensure all sections exist
+        for section, default_values in default_config.items():
+            if section not in config:
+                config[section] = default_values
+            elif isinstance(default_values, dict):
+                for key, default_value in default_values.items():
+                    if key not in config[section]:
+                        config[section][key] = default_value
+        
+        return config
     
     def get_default_config(self):
         """Get default configuration"""
@@ -72,6 +89,22 @@ class Config:
                 'device_path': '',  # Path to mounted Pixel device
                 'sync_folder': 'DCIM',
                 'delete_after_sync': False
+            },
+            'workflow': {
+                'incoming_folder': './incoming',
+                'pixel_sync_folder': './pixel_sync',
+                'nas_archive_folder': './nas_archive',
+                'processing_folder': './processing',
+                'icloud_delete_folder': './icloud_delete',
+                'pixel_batch_size': 5,
+                'sync_timeout_seconds': 300,
+                'cleanup_after_hours': 24
+            },
+            'syncthing': {
+                'api_url': 'http://localhost:8384',
+                'api_key': '',
+                'pixel_folder_id': '',
+                'timeout_seconds': 300
             }
         }
     
@@ -116,6 +149,11 @@ class Config:
         # Compression settings
         print("\n5. Compression Settings:")
         compress_enabled = input("Enable compression? (y/n, default: y): ").strip().lower()
+        
+        # Ensure compression section exists
+        if 'compression' not in self.config:
+            self.config['compression'] = {}
+        
         self.config['compression']['enabled'] = compress_enabled != 'n'
         
         if self.config['compression']['enabled']:
@@ -177,6 +215,11 @@ class Config:
         # Pixel sync configuration
         print("\n6. Google Pixel Sync (optional):")
         pixel_enabled = input("Enable Pixel device sync? (y/n, default: n): ").strip().lower()
+        
+        # Ensure pixel_sync section exists
+        if 'pixel_sync' not in self.config:
+            self.config['pixel_sync'] = {}
+        
         self.config['pixel_sync']['enabled'] = pixel_enabled == 'y'
         
         if self.config['pixel_sync']['enabled']:
@@ -184,6 +227,49 @@ class Config:
             self.config['pixel_sync']['sync_folder'] = input("Sync folder on Pixel (default: DCIM): ").strip() or "DCIM"
             delete_after = input("Delete files from Pixel after sync? (y/n, default: n): ").strip().lower()
             self.config['pixel_sync']['delete_after_sync'] = delete_after == 'y'
+        
+        # Workflow configuration
+        print("\n7. Workflow Configuration:")
+        incoming_folder = input("Incoming folder path (default: ./incoming): ").strip() or "./incoming"
+        self.config['workflow']['incoming_folder'] = incoming_folder
+        
+        pixel_sync_folder = input("Pixel sync folder path (default: ./pixel_sync): ").strip() or "./pixel_sync"
+        self.config['workflow']['pixel_sync_folder'] = pixel_sync_folder
+        
+        nas_archive_folder = input("NAS archive folder path (default: ./nas_archive): ").strip() or "./nas_archive"
+        self.config['workflow']['nas_archive_folder'] = nas_archive_folder
+        
+        processing_folder = input("Processing folder path (default: ./processing): ").strip() or "./processing"
+        self.config['workflow']['processing_folder'] = processing_folder
+        
+        icloud_delete_folder = input("iCloud delete folder path (default: ./icloud_delete): ").strip() or "./icloud_delete"
+        self.config['workflow']['icloud_delete_folder'] = icloud_delete_folder
+        
+        batch_size = input("Pixel sync batch size (default: 5): ").strip()
+        try:
+            self.config['workflow']['pixel_batch_size'] = int(batch_size) if batch_size else 5
+        except ValueError:
+            self.config['workflow']['pixel_batch_size'] = 5
+        
+        # Syncthing configuration
+        print("\n8. Syncthing Configuration:")
+        syncthing_enabled = input("Use Syncthing for Pixel sync verification? (y/n, default: y): ").strip().lower()
+        
+        if syncthing_enabled != 'n':
+            api_url = input("Syncthing API URL (default: http://localhost:8384): ").strip() or "http://localhost:8384"
+            self.config['syncthing']['api_url'] = api_url
+            
+            api_key = input("Syncthing API key: ").strip()
+            self.config['syncthing']['api_key'] = api_key
+            
+            folder_id = input("Syncthing Pixel folder ID: ").strip()
+            self.config['syncthing']['pixel_folder_id'] = folder_id
+            
+            timeout = input("Sync timeout in seconds (default: 300): ").strip()
+            try:
+                self.config['syncthing']['timeout_seconds'] = int(timeout) if timeout else 300
+            except ValueError:
+                self.config['syncthing']['timeout_seconds'] = 300
         
         self.save_config()
         print(f"\nConfiguration saved to {self.config_file}")
@@ -218,6 +304,22 @@ class Config:
             print(f"  Device path: {self.config['pixel_sync']['device_path'] or 'Not set'}")
             print(f"  Sync folder: {self.config['pixel_sync']['sync_folder']}")
             print(f"  Delete after sync: {self.config['pixel_sync']['delete_after_sync']}")
+        
+        # Workflow settings
+        print(f"\nWorkflow Settings:")
+        print(f"  Incoming folder: {self.config['workflow']['incoming_folder']}")
+        print(f"  Pixel sync folder: {self.config['workflow']['pixel_sync_folder']}")
+        print(f"  NAS archive folder: {self.config['workflow']['nas_archive_folder']}")
+        print(f"  Processing folder: {self.config['workflow']['processing_folder']}")
+        print(f"  iCloud delete folder: {self.config['workflow']['icloud_delete_folder']}")
+        print(f"  Pixel batch size: {self.config['workflow']['pixel_batch_size']}")
+        
+        # Syncthing settings
+        print(f"\nSyncthing Settings:")
+        print(f"  API URL: {self.config['syncthing']['api_url']}")
+        print(f"  API Key: {'*' * len(self.config['syncthing']['api_key']) if self.config['syncthing']['api_key'] else 'Not set'}")
+        print(f"  Pixel folder ID: {self.config['syncthing']['pixel_folder_id'] or 'Not set'}")
+        print(f"  Timeout: {self.config['syncthing']['timeout_seconds']} seconds")
     
     def get(self, key_path, default=None):
         """Get configuration value using dot notation (e.g., 'supabase.url')"""
