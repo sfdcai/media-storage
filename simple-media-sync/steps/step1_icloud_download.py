@@ -75,8 +75,7 @@ def main():
                     str(destination), 
                     file_info['size'], 
                     file_hash, 
-                    'downloaded',
-                    {'step': 1, 'source': 'icloud'}
+                    'downloaded'
                 )
                 
                 # Add to workflow tracking
