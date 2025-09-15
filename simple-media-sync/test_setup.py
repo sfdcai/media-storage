@@ -11,7 +11,6 @@ sys.path.append('.')
 
 from config_loader import Config
 from logger import setup_logger
-from icloud_manager import iCloudManager
 
 
 def test_config():
@@ -34,11 +33,6 @@ def test_config():
         
         if icloud_username:
             print("✅ iCloud username configured")
-            trusted_device = config.get('icloud.trusted_device', False)
-            if trusted_device:
-                print("✅ iCloud device is trusted (2FA setup complete)")
-            else:
-                print("⚠️ iCloud device not trusted (2FA setup needed)")
         else:
             print("⚠️ iCloud username not configured")
         
@@ -109,41 +103,6 @@ def test_step_files():
     return True
 
 
-def test_icloud_2fa():
-    """Test iCloud 2FA setup"""
-    print("Testing iCloud 2FA setup...")
-    
-    try:
-        config = Config()
-        logger = setup_logger()
-        icloud = iCloudManager(config, logger)
-        
-        # Check if iCloud is configured
-        if not config.get('icloud.username'):
-            print("⚠️ iCloud username not configured - skipping 2FA test")
-            return True
-        
-        # Check if device is trusted
-        if config.get('icloud.trusted_device', False):
-            print("✅ iCloud device is already trusted")
-            
-            # Test connection
-            if icloud.test_icloud_connection():
-                print("✅ iCloud connection test successful")
-                return True
-            else:
-                print("❌ iCloud connection test failed")
-                return False
-        else:
-            print("⚠️ iCloud device not trusted - 2FA setup needed")
-            print("Run: python3 setup_icloud_2fa.py")
-            return False
-            
-    except Exception as e:
-        print(f"❌ iCloud 2FA test failed: {e}")
-        return False
-
-
 def main():
     """Run all tests"""
     print("=== Media Sync Workflow Test ===")
@@ -151,8 +110,7 @@ def main():
     tests = [
         test_config,
         test_imports,
-        test_step_files,
-        test_icloud_2fa
+        test_step_files
     ]
     
     all_passed = True

@@ -54,7 +54,7 @@ mkdir -p incoming pixel_sync nas_archive processing icloud_delete backups
 echo "Setting permissions..."
 chmod +x setup.py test_setup.py workflow_orchestrator.py
 chmod +x steps/*.py
-chmod +x run_media_sync.sh
+chmod +x run_with_venv.sh
 
 # Create systemd service for Syncthing (optional)
 echo "Creating Syncthing service..."
@@ -77,25 +77,19 @@ EOF
 # Enable Syncthing service
 systemctl enable syncthing
 
-# Install Media Sync service
-echo "Installing Media Sync service..."
-cp media-sync.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable media-sync
-
 echo "✅ Alpine Linux setup complete!"
 echo ""
 echo "Next steps:"
-echo "1. Run: ./run_media_sync.sh python3 setup.py"
-echo "2. Run: ./run_media_sync.sh python3 test_setup.py"
+echo "1. Run setup: ./run_with_venv.sh python3 setup.py"
+echo "2. Test setup: ./run_with_venv.sh python3 test_setup.py"
 echo "3. Start Syncthing: systemctl start syncthing"
-echo "4. Run workflow: ./run_media_sync.sh python3 workflow_orchestrator.py --workflow"
+echo "4. Run workflow: ./run_with_venv.sh python3 workflow_orchestrator.py --workflow"
 echo ""
 echo "Service management:"
-echo "- Start service: systemctl start media-sync"
-echo "- Stop service: systemctl stop media-sync"
-echo "- View logs: journalctl -u media-sync -f"
+echo "- Start Syncthing: systemctl start syncthing"
+echo "- Stop Syncthing: systemctl stop syncthing"
+echo "- View Syncthing logs: journalctl -u syncthing -f"
 echo ""
-echo "Or activate virtual environment manually:"
-echo "source /opt/media-sync-env/bin/activate"
-echo "python3 setup.py"
+echo "Virtual environment usage:"
+echo "- Use wrapper: ./run_with_venv.sh python3 <script>"
+echo "- Or activate manually: source /opt/media-sync-env/bin/activate"

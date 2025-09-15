@@ -1,5 +1,5 @@
 #!/bin/bash
-# Wrapper script to run media sync with virtual environment
+# Wrapper script to run commands with virtual environment
 
 # Activate virtual environment
 source /opt/media-sync-env/bin/activate

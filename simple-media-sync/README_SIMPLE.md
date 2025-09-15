@@ -16,6 +16,28 @@ python setup.py
 python test_setup.py
 ```
 
+### iCloud Setup
+iCloud integration uses `icloudpd` directly. When you first run the workflow, it will prompt for your 2FA code. After that, it will remember your device and won't ask again.
+
+**Note**: Make sure `icloudpd` is installed:
+```bash
+pip install icloudpd
+```
+
+### Alpine Linux Setup
+For Alpine Linux systems:
+
+```bash
+# Run the Alpine setup script
+chmod +x alpine_setup.sh
+./alpine_setup.sh
+
+# Use the wrapper script for commands
+./run_with_venv.sh python3 setup.py
+./run_with_venv.sh python3 workflow_orchestrator.py --workflow
+```
+
+
 ### 2. Run Workflow
 
 **Option A: Run individual steps**
