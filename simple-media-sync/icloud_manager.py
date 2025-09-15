@@ -19,7 +19,7 @@ class iCloudManager:
         self.icloud_download_dir = config.get('icloud.download_dir', '')
         self.icloudpd_path = config.get('icloud.icloudpd_path', 'icloudpd')
     
-    def download_from_icloud(self, dry_run: bool = False) -> List[str]:
+    def download_from_icloud(self, dry_run: bool = False, limit: int = 5) -> List[str]:
         """Download files from iCloud using icloudpd directly"""
         if not self.icloud_username or not self.icloud_download_dir:
             self.logger.error("iCloud credentials or download directory not configured")
@@ -39,7 +39,6 @@ class iCloudManager:
                 self.icloudpd_path,
                 '--username', self.icloud_username,
                 '--directory', self.icloud_download_dir,
-                '--download-only',
                 '--folder-structure', 'none',
                 '--recent', '30',
                 '--skip-videos'
@@ -53,7 +52,7 @@ class iCloudManager:
             
             if result.returncode == 0:
                 self.logger.info("iCloud download completed successfully")
-                return self._get_downloaded_files()
+                return self._get_downloaded_files(limit)
             else:
                 self.logger.error("iCloud download failed")
                 return []
@@ -97,8 +96,8 @@ class iCloudManager:
             self.logger.error(f"Error deleting from iCloud: {e}")
             return False
     
-    def _get_downloaded_files(self) -> List[str]:
-        """Get list of recently downloaded files"""
+    def _get_downloaded_files(self, limit: int = 5) -> List[str]:
+        """Get list of downloaded files (limited for testing)"""
         if not self.icloud_download_dir:
             return []
         
@@ -106,18 +105,16 @@ class iCloudManager:
         if not download_path.exists():
             return []
         
-        # Get files modified in the last hour (recently downloaded)
-        import time
-        current_time = time.time()
-        recent_files = []
+        # Get all media files (since icloudpd shows "already exists" for existing files)
+        media_extensions = ['.jpg', '.jpeg', '.png', '.heic', '.mov', '.mp4', '.avi']
+        media_files = []
         
         for file_path in download_path.rglob('*'):
-            if file_path.is_file():
-                # Check if file was modified in the last hour
-                if current_time - file_path.stat().st_mtime < 3600:
-                    recent_files.append(str(file_path))
+            if file_path.is_file() and file_path.suffix.lower() in media_extensions:
+                media_files.append(str(file_path))
         
-        return recent_files
+        # Limit to specified number for testing
+        return media_files[:limit]
     
     def test_icloud_connection(self) -> bool:
         """Test iCloud connection"""

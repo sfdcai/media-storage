@@ -45,8 +45,9 @@ def main():
             return False
         
         # Download files from iCloud - icloudpd will handle 2FA automatically
-        logger.info("Downloading files from iCloud...")
-        downloaded_files = icloud.download_from_icloud(dry_run=False)
+        # Limit to 5 files for testing
+        logger.info("Downloading files from iCloud (limited to 5 files for testing)...")
+        downloaded_files = icloud.download_from_icloud(dry_run=False, limit=5)
         
         if not downloaded_files:
             logger.info("No new files downloaded from iCloud")

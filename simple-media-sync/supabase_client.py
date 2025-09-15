@@ -60,9 +60,12 @@ class SupabaseClient:
                 'file_hash': file_hash,
                 'last_modified': datetime.now().isoformat(),
                 'sync_status': 'synced',
-                'workflow_stage': workflow_stage,
-                'compression_metadata': compression_metadata or {}
+                'workflow_stage': workflow_stage
             }
+            
+            # Only add compression_metadata if it's provided and column exists
+            if compression_metadata:
+                data['compression_metadata'] = compression_metadata
             
             # Check if file already exists
             existing = self.client.table(self.table_name).select('*').eq('file_path', file_path).execute()
